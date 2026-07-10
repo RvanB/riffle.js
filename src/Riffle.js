@@ -27,6 +27,10 @@ function pickRendererClass(option) {
  * @property {HTMLElement|null} [viewport=null] Element used for zoom measurement and scroll preservation.
  * @property {boolean} [selectablePdfText=true] Whether to overlay selectable PDF text on settled spreads.
  * @property {number} [renderScale=1] Pixel supersampling multiplier for the rendered spread canvas.
+ * @property {number} [pdfRenderScale=1.5] Baseline PDF rasterization scale before DPR/zoom.
+ * @property {number} [pdfRenderScaleHeadroom=1.1] Extra PDF rasterization margin above visible size.
+ * @property {number} [pdfMaxRenderScale=1.5] Maximum PDF rasterization scale; set 0 to disable.
+ * @property {number} [pdfPreviewSourceScale=0.5] Fallback PDF preview rasterization scale when page dimensions are unavailable.
  */
 
 /**
@@ -53,6 +57,10 @@ export function Riffle({
   viewport = null,
   selectablePdfText = true,
   renderScale = 1,
+  pdfRenderScale = 1.5,
+  pdfRenderScaleHeadroom = 1.1,
+  pdfMaxRenderScale = 1.5,
+  pdfPreviewSourceScale = 0.5,
 } = {}) {
   const spreadCanvas = document.createElement("canvas");
   spreadCanvas.width = 0;
@@ -77,6 +85,10 @@ export function Riffle({
     showPageBorder,
     maxHighResPages,
     renderScale,
+    pdfRenderScale,
+    pdfRenderScaleHeadroom,
+    pdfMaxRenderScale,
+    pdfPreviewSourceScale,
   });
   const pdfTextLayer = selectablePdfText ? new PdfTextLayerController(bookViewer) : null;
 

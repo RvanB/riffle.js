@@ -1,16 +1,19 @@
 import { PageSource } from "./PageSource.js";
-import { loadPdfDocument, getPdfPageAspectRatio } from "../loading/pdfLoader.js";
+import { loadPdfDocument, getPdfPageAspectRatio, getPdfPageInfo } from "../loading/pdfLoader.js";
 
 const ASPECT_RATIO_WARNING_EPSILON = 0.001;
 
 // A "Page" shaped to match what LazyPageLoader writes to (mutable
 // srcCanvas/previewCanvas fields, a `source` describing the backing
 // rasterization). The viewer's ViewerPage proxies these via `metadata`.
-function makePdfPage(pdfDoc, pageNum, aspectRatio) {
+function makePdfPage(pdfDoc, pageNum, pageInfo) {
+  const aspectRatio = pageInfo.aspectRatio || pageInfo.width / pageInfo.height;
   return {
     source: { type: "pdf", pdfDoc, pageNum },
     ocrTextContent: null,
     aspectRatio,
+    pdfPointWidth: pageInfo.width,
+    pdfPointHeight: pageInfo.height,
     srcCanvas: null,
     previewCanvas: null,
     thumbnailSourceCanvas: null,
@@ -110,9 +113,16 @@ export class PdfPageSource extends PageSource {
     const aspectRatios = [];
     const pages = [];
     for (let i = 0; i < pdfDoc.numPages; i++) {
-      const aspectRatio = await getPdfPageAspectRatio(pdfDoc, i + 1);
+      let pageInfo;
+      try {
+        pageInfo = await getPdfPageInfo(pdfDoc, i + 1);
+      } catch (_error) {
+        const aspectRatio = await getPdfPageAspectRatio(pdfDoc, i + 1);
+        pageInfo = { width: 0, height: 0, aspectRatio };
+      }
+      const aspectRatio = pageInfo.aspectRatio || pageInfo.width / pageInfo.height;
       aspectRatios.push(aspectRatio);
-      pages.push(makePdfPage(pdfDoc, i + 1, aspectRatio));
+      pages.push(makePdfPage(pdfDoc, i + 1, pageInfo));
     }
     warnIfMixedPageAspectRatios(aspectRatios);
     this.pages = pages;

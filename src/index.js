@@ -53,6 +53,7 @@ export {
   loadPdfDocument,
   renderPdfPage,
   getPdfPageAspectRatio,
+  getPdfPageInfo,
   getPdfPageRasterSourceInfo,
   getPdfPageTextContent,
   getPdfPageLinkAnnotations,

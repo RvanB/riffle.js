@@ -1,24 +1,101 @@
-let worker = null;
-let workerPromise = null;
-let nextRequestId = 1;
-const pending = new Map();
 const PDFJS_URL = "https://unpkg.com/pdfjs-dist@5.6.205/build/pdf.mjs";
 const PDF_WORKER_URL = "https://unpkg.com/pdfjs-dist@5.6.205/build/pdf.worker.mjs";
 const PDF_CMAP_URL = "https://unpkg.com/pdfjs-dist@5.6.205/cmaps/";
 const PDF_STANDARD_FONT_DATA_URL = "https://unpkg.com/pdfjs-dist@5.6.205/standard_fonts/";
 const PDF_WASM_URL = "https://unpkg.com/pdfjs-dist@5.6.205/wasm/";
 
-// Main-thread dispatch queue. We send at most one request to the worker at a
-// time so that newly-arriving high-priority requests (e.g. high-res renders
-// for a destination spread the user just navigated to) can jump ahead of a
-// long FIFO of low-priority preview renders.
-const highPriorityQueue = [];
-const lowPriorityQueue = [];
-let inFlight = 0;
-const MAX_IN_FLIGHT = 1;
+const MAX_IN_FLIGHT = 2;
 let mainPdfjsPromise = null;
 const mainTextContentCache = new WeakMap();
 const mainLinkAnnotationCache = new WeakMap();
+
+function createWorkerClient(workerFile, label, { maxInFlight = MAX_IN_FLIGHT } = {}) {
+  let worker = null;
+  let workerPromise = null;
+  let nextRequestId = 1;
+  let inFlight = 0;
+  const pending = new Map();
+  const highPriorityQueue = [];
+  const lowPriorityQueue = [];
+
+  async function createWorker() {
+    const workerUrl = new URL(workerFile, import.meta.url);
+    let scriptUrl;
+    if (workerUrl.origin === self.location.origin) {
+      // Same origin (dev mode or self-hosted): load the worker file directly.
+      // Cache-bust per page load — Firefox in particular caches module
+      // workers aggressively and hard-reload doesn't always invalidate them.
+      workerUrl.searchParams.set("v", String(Date.now()));
+      scriptUrl = workerUrl.href;
+    } else {
+      // Cross-origin (CDN-hosted): browsers refuse to spawn a Worker from a
+      // different origin even with permissive CORS. Fetch the worker source
+      // and wrap it in a same-origin Blob URL.
+      const response = await fetch(workerUrl, { mode: "cors" });
+      if (!response.ok) throw new Error(`Failed to fetch ${workerFile}: ${response.status}`);
+      const source = await response.text();
+      const blob = new Blob([source], { type: "application/javascript" });
+      scriptUrl = URL.createObjectURL(blob);
+    }
+    const w = new Worker(scriptUrl, { type: "module" });
+    w.addEventListener("message", event => {
+      if (event.data?.debug) { console.log(`[${label}]`, ...event.data.debug); return; }
+      const { id, ok, result, error } = event.data;
+      const entry = pending.get(id);
+      if (!entry) return;
+      pending.delete(id);
+      inFlight = Math.max(0, inFlight - 1);
+      if (ok) entry.resolve(result);
+      else entry.reject(new Error(error));
+      dispatch();
+    });
+    w.addEventListener("error", event => {
+      console.error(`${label} worker error:`, event.message || event);
+    });
+    return w;
+  }
+
+  function ensureWorker() {
+    if (worker) return Promise.resolve(worker);
+    if (workerPromise) return workerPromise;
+    workerPromise = createWorker().then(w => {
+      worker = w;
+      return w;
+    });
+    return workerPromise;
+  }
+
+  function dispatch() {
+    while (inFlight < maxInFlight) {
+      const entry = highPriorityQueue.shift() || lowPriorityQueue.shift();
+      if (!entry) return;
+      inFlight += 1;
+      const id = nextRequestId++;
+      pending.set(id, { resolve: entry.resolve, reject: entry.reject });
+      ensureWorker().then(
+        w => w.postMessage({ id, type: entry.type, payload: entry.payload }, entry.transfer),
+        err => {
+          pending.delete(id);
+          inFlight = Math.max(0, inFlight - 1);
+          entry.reject(err);
+          dispatch();
+        },
+      );
+    }
+  }
+
+  return function call(type, payload, { transfer = [], priority = false } = {}) {
+    return new Promise((resolve, reject) => {
+      const entry = { type, payload, transfer, resolve, reject };
+      if (priority) highPriorityQueue.push(entry);
+      else lowPriorityQueue.push(entry);
+      dispatch();
+    });
+  };
+}
+
+const pdfjsCall = createWorkerClient("./pdfWorker.js", "PDF.js");
+const pdfiumCall = createWorkerClient("./pdfiumWorker.js", "PDFium");
 
 function getMainPdfjs() {
   if (!mainPdfjsPromise) {
@@ -141,78 +218,20 @@ async function getMainThreadLinkAnnotations(pdfDoc, pageNum) {
   return cache.get(pageNum);
 }
 
-async function createWorker() {
-  const workerUrl = new URL("./pdfWorker.js", import.meta.url);
-  let scriptUrl;
-  if (workerUrl.origin === self.location.origin) {
-    // Same origin (dev mode or self-hosted): load the worker file directly.
-    // Cache-bust per page load — Firefox in particular caches module
-    // workers aggressively and hard-reload doesn't always invalidate them.
-    workerUrl.searchParams.set("v", String(Date.now()));
-    scriptUrl = workerUrl.href;
-  } else {
-    // Cross-origin (CDN-hosted): browsers refuse to spawn a Worker from a
-    // different origin even with permissive CORS. Fetch the worker source
-    // and wrap it in a same-origin Blob URL.
-    const response = await fetch(workerUrl, { mode: "cors" });
-    if (!response.ok) throw new Error(`Failed to fetch pdfWorker.js: ${response.status}`);
-    const source = await response.text();
-    const blob = new Blob([source], { type: "application/javascript" });
-    scriptUrl = URL.createObjectURL(blob);
+async function getPdfJsWorkerDocId(pdfDoc) {
+  if (!pdfDoc?._mainThreadPdfBytes) {
+    if (pdfDoc?.docId && pdfDoc?._pdfBackend !== "pdfium") return pdfDoc.docId;
+    throw new Error("PDF.js worker document bytes are not available");
   }
-  const w = new Worker(scriptUrl, { type: "module" });
-  w.addEventListener("message", event => {
-    if (event.data?.debug) { console.log("[worker]", ...event.data.debug); return; }
-    const { id, ok, result, error } = event.data;
-    const entry = pending.get(id);
-    if (!entry) return;
-    pending.delete(id);
-    inFlight = Math.max(0, inFlight - 1);
-    if (ok) entry.resolve(result);
-    else entry.reject(new Error(error));
-    dispatch();
-  });
-  w.addEventListener("error", event => {
-    console.error("PDF worker error:", event.message || event);
-  });
-  return w;
-}
-
-function ensureWorker() {
-  if (worker) return Promise.resolve(worker);
-  if (workerPromise) return workerPromise;
-  workerPromise = createWorker().then(w => {
-    worker = w;
-    return w;
-  });
-  return workerPromise;
-}
-
-function dispatch() {
-  while (inFlight < MAX_IN_FLIGHT) {
-    const entry = highPriorityQueue.shift() || lowPriorityQueue.shift();
-    if (!entry) return;
-    inFlight += 1;
-    const id = nextRequestId++;
-    pending.set(id, { resolve: entry.resolve, reject: entry.reject });
-    ensureWorker().then(
-      w => w.postMessage({ id, type: entry.type, payload: entry.payload }, entry.transfer),
-      err => {
-        pending.delete(id);
-        inFlight = Math.max(0, inFlight - 1);
-        entry.reject(err);
-      },
-    );
+  if (!pdfDoc._pdfjsWorkerDocumentPromise) {
+    pdfDoc._pdfjsWorkerDocumentPromise = (async () => {
+      const buffer = pdfDoc._mainThreadPdfBytes.slice(0);
+      const result = await pdfjsCall("loadDocument", { buffer }, { transfer: [buffer] });
+      pdfDoc._pdfjsWorkerDocId = result.docId;
+      return result.docId;
+    })();
   }
-}
-
-function call(type, payload, { transfer = [], priority = false } = {}) {
-  return new Promise((resolve, reject) => {
-    const entry = { type, payload, transfer, resolve, reject };
-    if (priority) highPriorityQueue.push(entry);
-    else lowPriorityQueue.push(entry);
-    dispatch();
-  });
+  return pdfDoc._pdfjsWorkerDocumentPromise;
 }
 
 /**
@@ -224,11 +243,14 @@ function call(type, payload, { transfer = [], priority = false } = {}) {
 export async function loadPdfDocument(buffer) {
   const mainThreadBytes = buffer instanceof ArrayBuffer ? buffer.slice(0) : null;
   const transferable = buffer instanceof ArrayBuffer ? [buffer] : [];
-  const pdfDoc = await call("loadDocument", { buffer }, { transfer: transferable });
+  const pdfDoc = await pdfiumCall("loadDocument", { buffer }, { transfer: transferable });
   if (mainThreadBytes) {
     Object.defineProperties(pdfDoc, {
+      _pdfBackend: { value: "pdfium" },
       _mainThreadPdfBytes: { value: mainThreadBytes },
       _mainThreadPdfDocumentPromise: { value: null, writable: true },
+      _pdfjsWorkerDocumentPromise: { value: null, writable: true },
+      _pdfjsWorkerDocId: { value: 0, writable: true },
     });
   }
   return pdfDoc;
@@ -242,7 +264,18 @@ export async function loadPdfDocument(buffer) {
  * @returns {Promise<number>} Page width divided by page height.
  */
 export async function getPdfPageAspectRatio(pdfDoc, pageNum) {
-  return call("getAspectRatio", { docId: pdfDoc.docId, pageNum });
+  return pdfiumCall("getAspectRatio", { docId: pdfDoc.docId, pageNum });
+}
+
+/**
+ * Returns a PDF page's native point size.
+ *
+ * @param {Object} pdfDoc Worker document handle.
+ * @param {number} pageNum One-based PDF page number.
+ * @returns {Promise<{width:number,height:number,aspectRatio:number}>} Page size in PDF points.
+ */
+export async function getPdfPageInfo(pdfDoc, pageNum) {
+  return pdfiumCall("getPageInfo", { docId: pdfDoc.docId, pageNum });
 }
 
 /**
@@ -250,10 +283,13 @@ export async function getPdfPageAspectRatio(pdfDoc, pageNum) {
  *
  * @param {Object} pdfDoc Worker document handle.
  * @param {number} pageNum One-based PDF page number.
+ * @param {Object} [options={}] Request options.
+ * @param {boolean} [options.priority=false] If true, queue ahead of low-priority renders.
  * @returns {Promise<Object>} Raster source information.
  */
-export async function getPdfPageRasterSourceInfo(pdfDoc, pageNum) {
-  return call("getRasterInfo", { docId: pdfDoc.docId, pageNum });
+export async function getPdfPageRasterSourceInfo(pdfDoc, pageNum, { priority = false } = {}) {
+  const docId = await getPdfJsWorkerDocId(pdfDoc);
+  return pdfjsCall("getRasterInfo", { docId, pageNum }, { priority });
 }
 
 /**
@@ -270,7 +306,8 @@ export async function getPdfPageTextContent(pdfDoc, pageNum, { priority = false 
     // Fall back to the worker path for externally-created document handles or
     // browsers that reject the duplicate main-thread PDF.js document.
   }
-  return call("getTextContent", { docId: pdfDoc.docId, pageNum }, { priority });
+  const docId = await getPdfJsWorkerDocId(pdfDoc);
+  return pdfjsCall("getTextContent", { docId, pageNum }, { priority });
 }
 
 /**
@@ -287,7 +324,8 @@ export async function getPdfPageLinkAnnotations(pdfDoc, pageNum, { priority = fa
     // Fall back to the worker path for externally-created document handles or
     // browsers that reject the duplicate main-thread PDF.js document.
   }
-  return call("getLinkAnnotations", { docId: pdfDoc.docId, pageNum }, { priority });
+  const docId = await getPdfJsWorkerDocId(pdfDoc);
+  return pdfjsCall("getLinkAnnotations", { docId, pageNum }, { priority });
 }
 
 /**
@@ -302,7 +340,7 @@ export async function getPdfPageLinkAnnotations(pdfDoc, pageNum, { priority = fa
  * @returns {Promise<ImageBitmap>} Rendered page bitmap.
  */
 export async function renderPdfPage(pdfDoc, pageNum, scale, { downscaleTo = 0, priority = false } = {}) {
-  return call(
+  return pdfiumCall(
     "renderPage",
     { docId: pdfDoc.docId, pageNum, scale, downscaleTo },
     { priority },
@@ -317,5 +355,12 @@ export async function renderPdfPage(pdfDoc, pageNum, scale, { downscaleTo = 0, p
  */
 export function requestPdfDocumentCleanup(pdfDoc) {
   if (!pdfDoc?.docId) return;
-  call("requestCleanup", { docId: pdfDoc.docId }).catch(() => {});
+  pdfiumCall("requestCleanup", { docId: pdfDoc.docId }).catch(() => {});
+  if (pdfDoc._pdfjsWorkerDocId) {
+    pdfjsCall("requestCleanup", { docId: pdfDoc._pdfjsWorkerDocId }).catch(() => {});
+  } else if (pdfDoc._pdfjsWorkerDocumentPromise) {
+    pdfDoc._pdfjsWorkerDocumentPromise
+      .then(docId => pdfjsCall("requestCleanup", { docId }).catch(() => {}))
+      .catch(() => {});
+  }
 }

@@ -244,6 +244,9 @@ const rasterInfoCache = new Map();
 const textContentCache = new Map();
 const linkAnnotationCache = new Map();
 let nextDocId = 1;
+const pageCache = new Map();
+const MAX_CACHED_PAGES = 12;
+const MAX_CACHED_PAGE_AGE_MS = 30_000;
 
 function bumpOps(docId) {
   activeOps.set(docId, (activeOps.get(docId) || 0) + 1);
@@ -263,18 +266,65 @@ function maybeCleanup(docId) {
   rasterInfoCache.delete(docId);
   textContentCache.delete(docId);
   linkAnnotationCache.delete(docId);
+  const cachedPages = pageCache.get(docId);
+  if (cachedPages) {
+    for (const entry of cachedPages.values()) entry.page.cleanup?.();
+    pageCache.delete(docId);
+  }
   docs.get(docId)?.cleanup?.();
 }
 
-async function withPdfPage(docId, pageNum, work) {
+async function getCachedPdfPage(docId, pageNum, doc) {
+  let docCache = pageCache.get(docId);
+  if (!docCache) {
+    docCache = new Map();
+    pageCache.set(docId, docCache);
+  }
+  let entry = docCache.get(pageNum);
+  if (!entry) {
+    entry = { page: await doc.getPage(pageNum), lastUsed: 0 };
+    docCache.set(pageNum, entry);
+  }
+  entry.lastUsed = performance.now();
+  return entry.page;
+}
+
+function trimPageCache(docId) {
+  const docCache = pageCache.get(docId);
+  if (!docCache) return;
+  const now = performance.now();
+  for (const [pageNum, entry] of docCache) {
+    if (now - entry.lastUsed <= MAX_CACHED_PAGE_AGE_MS) continue;
+    entry.page.cleanup?.();
+    docCache.delete(pageNum);
+  }
+  while (docCache.size > MAX_CACHED_PAGES) {
+    let oldestPageNum = null;
+    let oldestTime = Infinity;
+    for (const [pageNum, entry] of docCache) {
+      if (entry.lastUsed >= oldestTime) continue;
+      oldestTime = entry.lastUsed;
+      oldestPageNum = pageNum;
+    }
+    if (oldestPageNum === null) break;
+    docCache.get(oldestPageNum)?.page.cleanup?.();
+    docCache.delete(oldestPageNum);
+  }
+  if (!docCache.size) pageCache.delete(docId);
+}
+
+async function withPdfPage(docId, pageNum, work, { cachePage = false } = {}) {
   const doc = docs.get(docId);
   if (!doc) throw new Error(`Unknown pdf docId: ${docId}`);
   bumpOps(docId);
-  const page = await doc.getPage(pageNum);
+  const page = cachePage
+    ? await getCachedPdfPage(docId, pageNum, doc)
+    : await doc.getPage(pageNum);
   try {
     return await work(page);
   } finally {
-    page.cleanup?.();
+    if (cachePage) trimPageCache(docId);
+    else page.cleanup?.();
     dropOps(docId);
   }
 }
@@ -408,7 +458,7 @@ async function computeRasterInfo(docId, pageNum) {
       placedHeight: primaryImage?.placedHeight || 0,
       primaryImageDpi: primaryImage?.dpi || 0,
     };
-  });
+  }, { cachePage: true });
 }
 
 function computeTargetSize(sourceWidth, sourceHeight, maxEdge) {
@@ -425,6 +475,149 @@ function computeTargetSize(sourceWidth, sourceHeight, maxEdge) {
     width: Math.max(1, Math.round(sourceWidth * scale)),
     height: Math.max(1, Math.round(sourceHeight * scale)),
   };
+}
+
+function makeImageSourceFromPdfImage(imageLike) {
+  if (!imageLike?.width || !imageLike?.height) return null;
+  if (
+    typeof ImageBitmap !== "undefined" && imageLike instanceof ImageBitmap
+    || typeof OffscreenCanvas !== "undefined" && imageLike instanceof OffscreenCanvas
+  ) {
+    return { source: imageLike, close: null };
+  }
+
+  const { width, height, data } = imageLike;
+  if (!data) return null;
+  const pixelCount = width * height;
+  let rgba = null;
+
+  if (data.length === pixelCount * 4) {
+    rgba = data instanceof Uint8ClampedArray
+      ? data
+      : new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
+  } else if (data.length === pixelCount * 3) {
+    rgba = new Uint8ClampedArray(pixelCount * 4);
+    for (let src = 0, dest = 0; src < data.length; src += 3, dest += 4) {
+      rgba[dest] = data[src];
+      rgba[dest + 1] = data[src + 1];
+      rgba[dest + 2] = data[src + 2];
+      rgba[dest + 3] = 255;
+    }
+  } else if (data.length === pixelCount) {
+    rgba = new Uint8ClampedArray(pixelCount * 4);
+    for (let src = 0, dest = 0; src < data.length; src += 1, dest += 4) {
+      const value = data[src];
+      rgba[dest] = value;
+      rgba[dest + 1] = value;
+      rgba[dest + 2] = value;
+      rgba[dest + 3] = 255;
+    }
+  }
+
+  if (!rgba) return null;
+  const canvas = new OffscreenCanvas(width, height);
+  canvas.getContext("2d").putImageData(new ImageData(rgba, width, height), 0, 0);
+  return { source: canvas, close: null };
+}
+
+async function tryRenderSingleRasterPage(page, viewport, renderWidth, renderHeight) {
+  const lib = await getPdfjs();
+  const operatorList = await page.getOperatorList();
+  const fnArray = operatorList.fnArray || [];
+  const argsArray = operatorList.argsArray || [];
+  const imageOps = new Set([
+    lib.OPS.paintImageXObject,
+    lib.OPS.paintInlineImageXObject,
+  ]);
+  const disallowedPaintOps = new Set([
+    lib.OPS.constructPath,
+    lib.OPS.stroke,
+    lib.OPS.closeStroke,
+    lib.OPS.fill,
+    lib.OPS.eoFill,
+    lib.OPS.fillStroke,
+    lib.OPS.eoFillStroke,
+    lib.OPS.closeFillStroke,
+    lib.OPS.closeEOFillStroke,
+    lib.OPS.shadingFill,
+    lib.OPS.clip,
+    lib.OPS.eoClip,
+    lib.OPS.paintFormXObjectBegin,
+    lib.OPS.paintFormXObjectEnd,
+    lib.OPS.paintJpegXObject,
+    lib.OPS.paintImageMaskXObject,
+    lib.OPS.paintImageMaskXObjectRepeat,
+    lib.OPS.paintSolidColorImageMask,
+    lib.OPS.paintImageXObjectRepeat,
+    lib.OPS.paintInlineImageXObjectGroup,
+    lib.OPS.showText,
+    lib.OPS.showSpacedText,
+    lib.OPS.nextLineShowText,
+    lib.OPS.nextLineSetSpacingShowText,
+  ].filter(value => typeof value === "number"));
+
+  const stack = [];
+  let transform = [1, 0, 0, 1, 0, 0];
+  let imageEntry = null;
+  const pageViewport = page.getViewport({ scale: 1 });
+  const pageArea = pageViewport.width * pageViewport.height;
+
+  for (let i = 0; i < fnArray.length; i += 1) {
+    const fnId = fnArray[i];
+    const args = argsArray[i] || [];
+    if (fnId === lib.OPS.save) {
+      stack.push(transform.slice());
+      continue;
+    }
+    if (fnId === lib.OPS.restore) {
+      transform = stack.pop() || [1, 0, 0, 1, 0, 0];
+      continue;
+    }
+    if (fnId === lib.OPS.transform) {
+      transform = multiplyTransform(transform, args);
+      continue;
+    }
+    if (imageOps.has(fnId)) {
+      if (imageEntry) return null;
+      const imageLike = fnId === lib.OPS.paintImageXObject
+        ? await getResolvedPdfObject(page, args[0])
+        : args[0];
+      const placedSize = getPlacedImageSize(transform, page.userUnit || 1);
+      const placedArea = placedSize.width * placedSize.height;
+      if (pageArea <= 0 || placedArea / pageArea < 0.95) return null;
+      imageEntry = { imageLike };
+      continue;
+    }
+    if (disallowedPaintOps.has(fnId)) return null;
+  }
+
+  if (!imageEntry) return null;
+  const imageSource = makeImageSourceFromPdfImage(imageEntry.imageLike);
+  if (!imageSource) return null;
+
+  const canvas = new OffscreenCanvas(renderWidth, renderHeight);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, renderWidth, renderHeight);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(imageSource.source, 0, 0, renderWidth, renderHeight);
+  imageSource.close?.();
+  return canvas.transferToImageBitmap();
+}
+
+function shouldTrySingleRasterRender(page, rasterInfo) {
+  if (!rasterInfo?.hasRasterImage || rasterInfo.imageCount !== 1) return false;
+  const pageViewport = page.getViewport({ scale: 1 });
+  const pageArea = pageViewport.width * pageViewport.height;
+  const placedArea = (rasterInfo.placedWidth || 0) * (rasterInfo.placedHeight || 0);
+  return pageArea > 0 && placedArea / pageArea >= 0.95;
+}
+
+async function getCachedRasterInfo(docId, pageNum) {
+  const docCache = rasterInfoCache.get(docId);
+  const cached = docCache?.get(pageNum);
+  return cached ? cached.catch?.(() => null) ?? cached : null;
 }
 
 const handlers = {
@@ -569,6 +762,11 @@ const handlers = {
         : page.getViewport({ scale: effectiveScale });
       const renderWidth = Math.max(1, Math.min(MAX_PDF_RENDER_EDGE, Math.round(viewport.width)));
       const renderHeight = Math.max(1, Math.min(MAX_PDF_RENDER_EDGE, Math.round(viewport.height)));
+      const rasterInfo = await getCachedRasterInfo(docId, pageNum);
+      if (shouldTrySingleRasterRender(page, rasterInfo)) {
+        const directRasterBitmap = await tryRenderSingleRasterPage(page, viewport, renderWidth, renderHeight);
+        if (directRasterBitmap) return directRasterBitmap;
+      }
       const renderCanvas = new OffscreenCanvas(renderWidth, renderHeight);
       const renderCtx = renderCanvas.getContext("2d");
       await page.render({ canvasContext: renderCtx, viewport }).promise;
@@ -581,7 +779,7 @@ const handlers = {
       }
 
       return renderCanvas.transferToImageBitmap();
-    });
+    }, { cachePage: true });
   },
 
   releaseDocument({ docId }) {

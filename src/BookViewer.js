@@ -27,6 +27,10 @@ const DEFAULT_LAYOUT = {
  * @property {number} [paperTextureStrength=0.18] Paper texture/normal strength from 0 to 1.
  * @property {boolean} [showPageBorder=true] Whether to render the page edge treatment.
  * @property {number} [maxHighResPages=8] High-resolution page bitmap LRU capacity.
+ * @property {number} [pdfRenderScale=1.5] Baseline PDF rasterization scale before DPR/zoom.
+ * @property {number} [pdfRenderScaleHeadroom=1.1] Extra PDF rasterization margin above visible size.
+ * @property {number} [pdfMaxRenderScale=1.5] Maximum PDF rasterization scale; set 0 to disable.
+ * @property {number} [pdfPreviewSourceScale=0.5] Fallback PDF preview rasterization scale when page dimensions are unavailable.
  * @property {number} [renderScale=1] Pixel supersampling multiplier for the rendered spread canvas.
  */
 
@@ -53,6 +57,10 @@ export class BookViewer {
     paperTextureStrength = 0.18,
     showPageBorder = true,
     maxHighResPages = 8,
+    pdfRenderScale = 1.5,
+    pdfRenderScaleHeadroom = 1.1,
+    pdfMaxRenderScale = 1.5,
+    pdfPreviewSourceScale = 0.5,
     renderScale = 1,
   } = {}) {
     if (!spreadCanvas) throw new Error("BookViewer: spreadCanvas is required");
@@ -92,7 +100,13 @@ export class BookViewer {
 
     // Renderer + loaders.
     this.spreadRenderer = new rendererClass(spreadCanvas);
-    this.lazyPageLoader = new LazyPageLoader(this.#loaderBook(), pageIndex => this.#onPageReady(pageIndex), { maxHighResPages });
+    this.lazyPageLoader = new LazyPageLoader(this.#loaderBook(), pageIndex => this.#onPageReady(pageIndex), {
+      maxHighResPages,
+      pdfRenderScale,
+      pdfRenderScaleHeadroom,
+      pdfMaxRenderScale,
+      pdfPreviewSourceScale,
+    });
 
     // Controllers — they read fields off `this` (the viewer).
     this.navigationController = new NavigationController(this);
@@ -114,6 +128,14 @@ export class BookViewer {
   get isAnimating() { return this.spreadRenderer.isAnimating; }
   get numSpreads() { return this.book.numSpreads(); }
   get viewerBook() { return this.book; }   // alias for legacy host code
+
+  getHighResTargetPagePixels() {
+    const margins = computeMargins(this.layout, this.zoomController.getRenderScale());
+    return {
+      width: Math.max(1, Math.round(margins.pagePxW)),
+      height: Math.max(1, Math.round(margins.pagePxH)),
+    };
+  }
 
   /**
    * Replaces the page source, resets navigation to spread 0, warms previews,
@@ -266,7 +288,13 @@ export class BookViewer {
     this.effectiveSpread = this.navigationController.getEffectiveSpread();
 
     if (this.book.pages.length) {
-      this.lazyPageLoader.ensureSpreadLoaded(this.currentSpread, 1, { allowHighRes: false });
+      this.lazyPageLoader.ensureSpreadLoaded(this.currentSpread, 1, {
+        allowHighRes: false,
+        targetPagePixels: {
+          width: Math.max(1, Math.round(margins.pagePxW)),
+          height: Math.max(1, Math.round(margins.pagePxH)),
+        },
+      });
     }
 
     const spreadPages = this.#renderableSpreadPages(this.currentSpread);
@@ -295,7 +323,10 @@ export class BookViewer {
     if (this.spreadRenderer.isAnimating) return;
     const targetSpread = this.navigationController.getEffectiveSpread();
     if (this.book.pages.length) {
-      this.lazyPageLoader.ensureSpreadLoaded(targetSpread, this.contentZoom, { allowHighRes: true });
+      this.lazyPageLoader.ensureSpreadLoaded(targetSpread, this.contentZoom, {
+        allowHighRes: true,
+        targetPagePixels: this.getHighResTargetPagePixels(),
+      });
       this.#prefetchAdjacentHighRes(targetSpread);
     }
     if (this.zoomController.applySafeRenderZoom()) this.redraw();
@@ -313,13 +344,14 @@ export class BookViewer {
 
   #prefetchAdjacentHighRes(targetSpread) {
     const numSpreads = this.numSpreads;
+    const targetPagePixels = this.getHighResTargetPagePixels();
     for (const adj of [targetSpread - 1, targetSpread + 1]) {
       if (adj < 0 || adj >= numSpreads) continue;
       const { left, right } = this.book.spreadPageEntries(adj);
       for (const pageIndex of [left.pageIndex, right.pageIndex]) {
         if (pageIndex < 0) continue;
-        if (this.lazyPageLoader.isPageHighResReady(pageIndex, this.contentZoom)) continue;
-        this.lazyPageLoader.ensurePageHighRes(pageIndex, this.contentZoom, { priority: false });
+        if (this.lazyPageLoader.isPageHighResReady(pageIndex, this.contentZoom, { targetPagePixels })) continue;
+        this.lazyPageLoader.ensurePageHighRes(pageIndex, this.contentZoom, { priority: false, targetPagePixels });
       }
     }
   }

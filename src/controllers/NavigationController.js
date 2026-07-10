@@ -29,11 +29,12 @@ export class NavigationController {
   #kickoffHighResForSpread(spreadIndex) {
     const v = this.viewer;
     if (spreadIndex < 0 || spreadIndex >= v.book.numSpreads()) return;
+    const targetPagePixels = v.getHighResTargetPagePixels?.() ?? null;
     const { left, right } = v.book.spreadPageEntries(spreadIndex);
     for (const pageIndex of [left.pageIndex, right.pageIndex]) {
       if (pageIndex < 0) continue;
-      if (v.lazyPageLoader.isPageHighResReady(pageIndex, v.contentZoom)) continue;
-      v.lazyPageLoader.ensurePageHighRes(pageIndex, v.contentZoom);
+      if (v.lazyPageLoader.isPageHighResReady(pageIndex, v.contentZoom, { targetPagePixels })) continue;
+      v.lazyPageLoader.ensurePageHighRes(pageIndex, v.contentZoom, { targetPagePixels });
     }
   }
 
