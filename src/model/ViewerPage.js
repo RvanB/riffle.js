@@ -22,8 +22,8 @@ export class ViewerPage {
     const m = this.metadata;
     return m?.displayCanvasOverride
       ?? m?.composedDisplayCanvas
-      ?? m?.composedPreviewCanvas
       ?? m?.srcCanvas
+      ?? m?.composedPreviewCanvas
       ?? m?.previewCanvas
       ?? null;
   }

@@ -1,3 +1,5 @@
+import { getPageTurnTexturePolicy } from "./PageTurnTexturePolicy.js";
+
 const BASE_TURN_DURATION_MS = 750;
 const BASE_MULTI_SPREAD_TURN_INTERVAL_MS = 40;
 const MAX_QUEUE_DURATION_MS = 2000;
@@ -28,7 +30,12 @@ export class NavigationController {
 
   #kickoffHighResForSpread(spreadIndex, options = {}) {
     const v = this.viewer;
-    if (v.source?.shouldWarmTargetHighResBeforeNavigation?.(spreadIndex, options) === false) return;
+    const warmOptions = {
+      contentZoom: v.contentZoom,
+      renderZoom: v.renderZoom,
+      ...options,
+    };
+    if (v.source?.shouldWarmTargetHighResBeforeNavigation?.(spreadIndex, warmOptions) === false) return;
     v.ensureTargetHighResWindow?.(spreadIndex, options);
   }
 
@@ -83,6 +90,7 @@ export class NavigationController {
       this.navigateTo(nextSpread, isFinalStep ? preferredPageIndex : null, {
         fromQueuedJump: true,
         isFinalQueuedStep: isFinalStep,
+        targetSpread: clampedTarget,
         durationMs: stepDurationMs,
       });
       if (!isFinalStep) {
@@ -128,8 +136,14 @@ export class NavigationController {
 
       v.effectiveSpread = clampedTarget;
       this.animationDirection = direction;
-      const fromCanvas = v.createSpreadSnapshot(fromSpread);
-      const toCanvas = v.createSpreadSnapshot(clampedTarget);
+      const texturePolicy = getPageTurnTexturePolicy({
+        fromSpread,
+        toSpread: clampedTarget,
+        targetSpread: options.targetSpread ?? clampedTarget,
+        contentZoom: v.contentZoom,
+      });
+      const fromCanvas = v.createSpreadSnapshot(fromSpread, texturePolicy.fromSnapshot);
+      const toCanvas = v.createSpreadSnapshot(clampedTarget, texturePolicy.toSnapshot);
       v.lazyPageLoader.setEvictionsDeferred(true);
 
       const onDone = this.animationCompletionScheduled

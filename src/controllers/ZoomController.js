@@ -43,6 +43,15 @@ export class ZoomController {
     };
   }
 
+  getBaseCanvasCssSize() {
+    const viewport = this.getCanvasViewportSize();
+    const baseScale = computeScale(this.viewer.layout, viewport.width, viewport.height);
+    return {
+      width: Math.max(1, 2 * this.viewer.layout.pw * baseScale),
+      height: Math.max(1, this.viewer.layout.ph * baseScale),
+    };
+  }
+
   getRenderScale() {
     const viewport = this.getCanvasViewportSize();
     const baseScale = computeScale(this.viewer.layout, viewport.width, viewport.height);
@@ -63,18 +72,21 @@ export class ZoomController {
     return Math.max(CONTENT_ZOOM_MIN, Math.min(targetZoom, maxWidthZoom, maxHeightZoom));
   }
 
-  // Sets percentage CSS sizing only when zoom changes. Window/container
-  // resizes are handled by CSS itself; the backing canvas catches up after a
-  // debounced redraw.
+  // Sets a concrete CSS display size. The backing canvas catches up after a
+  // debounced redraw, but the visible box changes immediately for smooth zoom.
   syncCanvasStage() {
     const { spreadCanvas } = this.viewer;
     if (!spreadCanvas) return;
-    const size = `${Math.max(0.01, this.contentZoom) * 100}%`;
-    const cssW = size;
-    const cssH = size;
+    const baseSize = this.getBaseCanvasCssSize();
+    const zoom = Math.max(0.01, this.contentZoom);
+    const cssW = `${baseSize.width * zoom}px`;
+    const cssH = `${baseSize.height * zoom}px`;
     if (spreadCanvas.style.width !== cssW) spreadCanvas.style.width = cssW;
     if (spreadCanvas.style.height !== cssH) spreadCanvas.style.height = cssH;
     if (spreadCanvas.style.objectFit !== "contain") spreadCanvas.style.objectFit = "contain";
+    if (spreadCanvas.style.flex !== "0 0 auto") spreadCanvas.style.flex = "0 0 auto";
+    if (spreadCanvas.style.maxWidth !== "none") spreadCanvas.style.maxWidth = "none";
+    if (spreadCanvas.style.maxHeight !== "none") spreadCanvas.style.maxHeight = "none";
   }
 
   #zoomTo(nextZoom) {

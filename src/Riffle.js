@@ -29,7 +29,7 @@ function pickRendererClass(option) {
  * @property {number} [renderScale=1] Pixel supersampling multiplier for the rendered spread canvas.
  * @property {number} [pdfRenderScale=1.5] Baseline PDF rasterization scale before DPR/zoom.
  * @property {number} [pdfRenderScaleHeadroom=1.1] Extra PDF rasterization margin above visible size.
- * @property {number} [pdfMaxRenderScale=1.5] Maximum PDF rasterization scale; set 0 to disable.
+ * @property {number} [pdfMaxRenderScale=0] Maximum PDF rasterization scale; set 0 to disable.
  * @property {number} [pdfPreviewSourceScale=0.5] Fallback PDF preview rasterization scale when page dimensions are unavailable.
  */
 
@@ -59,7 +59,7 @@ export function Riffle({
   renderScale = 1,
   pdfRenderScale = 1.5,
   pdfRenderScaleHeadroom = 1.1,
-  pdfMaxRenderScale = 1.5,
+  pdfMaxRenderScale = 0,
   pdfPreviewSourceScale = 0.5,
 } = {}) {
   const spreadCanvas = document.createElement("canvas");

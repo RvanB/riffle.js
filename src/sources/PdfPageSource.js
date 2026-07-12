@@ -19,12 +19,12 @@ function getVisiblePdfRenderScale(page, targetPagePixels = null) {
   return Math.max(width / pdfWidth, height / pdfHeight);
 }
 
-function capPdfRenderScale(scale, { pdfMaxRenderScale = 1.5 } = {}) {
+function capPdfRenderScale(scale, { pdfMaxRenderScale = 0 } = {}) {
   return pdfMaxRenderScale > 0 ? Math.min(scale, pdfMaxRenderScale) : scale;
 }
 
 function getPdfRenderScaleForTarget(page, targetPagePixels, {
-  pdfMaxRenderScale = 1.5,
+  pdfMaxRenderScale = 0,
   headroom = 1,
   minScale = 0,
 } = {}) {
@@ -38,7 +38,7 @@ function getRequiredPdfRenderScale(page, previewZoom = 1, {
   targetPdfRenderScale = 0,
   pdfRenderScale = 1.5,
   pdfRenderScaleHeadroom = 1.1,
-  pdfMaxRenderScale = 1.5,
+  pdfMaxRenderScale = 0,
   devicePixelRatio = 1,
 } = {}) {
   const visibleScale = getPdfRenderScaleForTarget(page, targetPagePixels, {
@@ -207,7 +207,7 @@ export class PdfPageSource extends PageSource {
     targetPagePixels = this.getPagePreviewTarget(index),
     priority = "normal",
     pdfPreviewSourceScale = 0.5,
-    pdfMaxRenderScale = 1.5,
+    pdfMaxRenderScale = 0,
   } = {}) {
     const page = this.pages[index];
     if (!page) return null;

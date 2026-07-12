@@ -143,12 +143,17 @@ export class PageSource {
   /**
    * Whether a navigation should start target-resolution loading before turn.
    *
+   * The default skips preloading at deep zoom, where a destination page may
+   * require a very large raster and can jank the turn animation. The page will
+   * still sharpen after the navigation settles.
+   *
    * @param {number} _targetSpread Destination spread index.
    * @param {Object} [_options={}] Navigation context.
+   * @param {number} [_options.contentZoom] Current visual zoom.
    * @returns {boolean} True when pre-turn target-res warming is useful.
    */
-  shouldWarmTargetHighResBeforeNavigation(_targetSpread, _options = {}) {
-    return true;
+  shouldWarmTargetHighResBeforeNavigation(_targetSpread, { contentZoom = 1 } = {}) {
+    return Math.max(1, Number(contentZoom) || 1) <= 2;
   }
 
   /**

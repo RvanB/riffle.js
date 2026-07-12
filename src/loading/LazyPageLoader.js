@@ -2,12 +2,17 @@ import { SHARED_PREVIEW_SIZE } from "../previewSizing.js";
 import { comparePriority } from "./workerClient.js";
 
 const DEFAULT_PDF_RENDER_SCALE_HEADROOM = 1.1;
-const DEFAULT_PDF_MAX_RENDER_SCALE = 1.5;
+const DEFAULT_PDF_MAX_RENDER_SCALE = 0;
 const DEFAULT_PDF_PREVIEW_FALLBACK_SCALE = 0.5;
 const PREVIEW_PRIORITIES = new Set(["critical", "visible", "high", "normal", "background"]);
 
 function closeBitmap(bitmap) {
   if (bitmap && typeof bitmap.close === "function") bitmap.close();
+}
+
+function debugPageLifecycle(event, details = {}) {
+  const time = globalThis.performance?.now ? globalThis.performance.now().toFixed(1) : "0.0";
+  console.log(`[riffle:page ${time}ms] ${event}`, details);
 }
 
 function normalizePreviewPriority(priority) {
@@ -45,7 +50,10 @@ export class LazyPageLoader {
     this.onPageReady = onPageReady;
     this.pdfRenderScale = pdfRenderScale;
     this.pdfRenderScaleHeadroom = Math.max(1, Number(pdfRenderScaleHeadroom) || DEFAULT_PDF_RENDER_SCALE_HEADROOM);
-    this.pdfMaxRenderScale = Math.max(0, Number(pdfMaxRenderScale) || DEFAULT_PDF_MAX_RENDER_SCALE);
+    const parsedPdfMaxRenderScale = Number(pdfMaxRenderScale);
+    this.pdfMaxRenderScale = Number.isFinite(parsedPdfMaxRenderScale)
+      ? Math.max(0, parsedPdfMaxRenderScale)
+      : DEFAULT_PDF_MAX_RENDER_SCALE;
     this.pdfPreviewSourceScale = Math.max(0, Number(pdfPreviewSourceScale) || DEFAULT_PDF_PREVIEW_FALLBACK_SCALE);
     this.pdfPreviewMaxEdge = pdfPreviewMaxEdge;
     this.maxHighResPages = maxHighResPages;
@@ -303,6 +311,13 @@ export class LazyPageLoader {
         if (!previewBitmap) continue;
         page.previewCanvas = previewBitmap;
         if (!page.thumbnailSourceCanvas) page.thumbnailSourceCanvas = previewBitmap;
+        debugPageLifecycle("preview ready", {
+          pageIndex,
+          pageNumber: pageIndex + 1,
+          priority,
+          width: previewBitmap.width,
+          height: previewBitmap.height,
+        });
         this.onPageReady?.(pageIndex);
         this.#resolvePageReadyWaiters(pageIndex);
       } catch (error) {
@@ -332,10 +347,29 @@ export class LazyPageLoader {
       targetPdfRenderScale,
       renderConfig: this.#getRenderConfig({ priority: requestPriority }),
     }) ?? { ready: false, shouldLoad: false, request: null };
-    if (status.ready || !status.shouldLoad) return;
+    if (status.ready) {
+      debugPageLifecycle("high-res already ready", {
+        pageIndex,
+        pageNumber: pageIndex + 1,
+        priority: requestPriority,
+        targetPagePixels,
+        renderScale: page.loadedPdfRenderScale ?? null,
+        width: page.srcCanvas?.width ?? null,
+        height: page.srcCanvas?.height ?? null,
+      });
+      return;
+    }
+    if (!status.shouldLoad) return;
 
     page.loading = true;
     try {
+      debugPageLifecycle("high-res request start", {
+        pageIndex,
+        pageNumber: pageIndex + 1,
+        priority: requestPriority,
+        targetPagePixels,
+        request: status.request,
+      });
       const bitmap = await this.source.getPageHighRes(pageIndex, {
         ...status.request,
         priority: requestPriority,
@@ -358,6 +392,15 @@ export class LazyPageLoader {
       page.aspectRatio = bitmap.width / bitmap.height;
       this.source.commitPageHighRes?.(pageIndex, { page, bitmap, request: status.request });
       page.loading = false;
+      debugPageLifecycle("high-res ready", {
+        pageIndex,
+        pageNumber: pageIndex + 1,
+        priority: requestPriority,
+        targetPagePixels,
+        request: status.request,
+        width: bitmap.width,
+        height: bitmap.height,
+      });
       this.onPageReady?.(pageIndex);
       // Close the previous bitmap AFTER onPageReady so that the renderer has
       // a chance to swing its scene-pinned source refs onto the new bitmap

@@ -12,6 +12,11 @@ const DEFAULT_LAYOUT = {
 };
 const TARGET_HIGH_RES_WINDOW_PAGES = 6;
 
+function debugPageLifecycle(event, details = {}) {
+  const time = globalThis.performance?.now ? globalThis.performance.now().toFixed(1) : "0.0";
+  console.log(`[riffle:page ${time}ms] ${event}`, details);
+}
+
 /**
  * Options for {@link BookViewer}.
  *
@@ -30,7 +35,7 @@ const TARGET_HIGH_RES_WINDOW_PAGES = 6;
  * @property {number} [maxHighResPages=8] High-resolution page bitmap LRU capacity.
  * @property {number} [pdfRenderScale=1.5] Baseline PDF rasterization scale before DPR/zoom.
  * @property {number} [pdfRenderScaleHeadroom=1.1] Extra PDF rasterization margin above visible size.
- * @property {number} [pdfMaxRenderScale=1.5] Maximum PDF rasterization scale; set 0 to disable.
+ * @property {number} [pdfMaxRenderScale=0] Maximum PDF rasterization scale; set 0 to disable.
  * @property {number} [pdfPreviewSourceScale=0.5] Fallback PDF preview rasterization scale when page dimensions are unavailable.
  * @property {number} [renderScale=1] Pixel supersampling multiplier for the rendered spread canvas.
  */
@@ -60,7 +65,7 @@ export class BookViewer {
     maxHighResPages = 8,
     pdfRenderScale = 1.5,
     pdfRenderScaleHeadroom = 1.1,
-    pdfMaxRenderScale = 1.5,
+    pdfMaxRenderScale = 0,
     pdfPreviewSourceScale = 0.5,
     renderScale = 1,
   } = {}) {
@@ -133,10 +138,30 @@ export class BookViewer {
 
   getHighResTargetPagePixels() {
     const margins = computeMargins(this.layout, this.zoomController.getRenderScale());
+    const displayScale = this.#getDisplayedCanvasContentScale(margins);
+    if (displayScale > 0) {
+      const supersample = Math.max(1, Number(this.zoomController.renderScale) || 1);
+      return {
+        width: Math.max(1, Math.round(margins.pagePxW * displayScale * supersample)),
+        height: Math.max(1, Math.round(margins.pagePxH * displayScale * supersample)),
+      };
+    }
     return {
       width: Math.max(1, Math.round(margins.pagePxW)),
       height: Math.max(1, Math.round(margins.pagePxH)),
     };
+  }
+
+  #getDisplayedCanvasContentScale(margins) {
+    const canvas = this.spreadCanvas;
+    const rect = canvas?.getBoundingClientRect?.();
+    const cssWidth = Number(rect?.width) || canvas?.clientWidth || parseFloat(canvas?.style?.width) || 0;
+    const cssHeight = Number(rect?.height) || canvas?.clientHeight || parseFloat(canvas?.style?.height) || 0;
+    if (cssWidth <= 0 || cssHeight <= 0) return 0;
+
+    const intrinsicWidth = Math.max(1, Number(canvas?.width) || 2 * margins.pagePxW || 1);
+    const intrinsicHeight = Math.max(1, Number(canvas?.height) || margins.pagePxH || 1);
+    return Math.min(cssWidth / intrinsicWidth, cssHeight / intrinsicHeight);
   }
 
   /**
@@ -423,7 +448,10 @@ export class BookViewer {
   }
 
   // Snapshot a spread to a canvas for queued multi-spread animations.
-  createSpreadSnapshot(spreadIndex) {
+  createSpreadSnapshot(spreadIndex, {
+    preferPreviewSources = false,
+    preferPreviewBackFaceSources = preferPreviewSources,
+  } = {}) {
     const margins = computeMargins(this.layout, this.zoomController.getRenderScale());
     const pages = this.#renderableSpreadPages(spreadIndex);
     const { canvas } = this.spreadRenderer.snapshot(
@@ -431,13 +459,34 @@ export class BookViewer {
       margins,
       { left: { pipeline: [], key: "" }, right: { pipeline: [], key: "" } },
       this.display,
-      { previewZoom: this.renderZoom, showPageBorder: this.showPageBorder, pageCount: this.book.pages.length },
+      {
+        previewZoom: this.renderZoom,
+        showPageBorder: this.showPageBorder,
+        pageCount: this.book.pages.length,
+        preferPreviewSources,
+        preferPreviewBackFaceSources,
+      },
     );
     return canvas;
   }
 
   #onPageReady(pageIndex) {
     const viewerPage = this.book.pages[pageIndex] ?? null;
+    const { left, right } = this.book.spreadPageEntries(this.currentSpread);
+    const isOnCurrent = pageIndex === left.pageIndex || pageIndex === right.pageIndex;
+    debugPageLifecycle("pageready handled", {
+      pageIndex,
+      pageNumber: pageIndex + 1,
+      animating: this.spreadRenderer.isAnimating,
+      currentSpread: this.currentSpread,
+      effectiveSpread: this.effectiveSpread,
+      isOnCurrent,
+      hasSrcCanvas: !!viewerPage?.srcCanvas,
+      displayCanvasWidth: viewerPage?.displayCanvas?.width ?? null,
+      displayCanvasHeight: viewerPage?.displayCanvas?.height ?? null,
+      previewCanvasWidth: viewerPage?.previewCanvas?.width ?? null,
+      previewCanvasHeight: viewerPage?.previewCanvas?.height ?? null,
+    });
     if (this.spreadRenderer.isAnimating) {
       // Let host code (composition pipelines, thumbnail managers) react to
       // the fresh bitmap before the renderer reads through ViewerPage's
@@ -451,8 +500,6 @@ export class BookViewer {
     // Emit first so host listeners can populate composed canvases / placed
     // previews before the redraw samples ViewerPage.displayCanvas.
     this.emit("pageready", { pageIndex, animating: false });
-    const { left, right } = this.book.spreadPageEntries(this.currentSpread);
-    const isOnCurrent = pageIndex === left.pageIndex || pageIndex === right.pageIndex;
     if (isOnCurrent) {
       this.zoomController.applySafeRenderZoom();
       this.redraw();

@@ -2,6 +2,7 @@ import { drawPageBorder, getPageChromeColor } from "./primitives.js";
 import { getPaperTextureCanvasSync, loadPaperTextureCanvas } from "./paperTexture.js";
 import { SpreadRenderer } from "./SpreadRenderer.js";
 import { getPageGeometry } from "./layout.js";
+import { SHARED_PREVIEW_SIZE } from "../previewSizing.js";
 
 const MAX_SHADOW_OCCLUDERS = 8;
 const TURN_EASING_POWER = 3;
@@ -9,6 +10,54 @@ const TURN_DURATION_MS = 750;
 const DEBUG_LOG_TURN_HINGE = false;
 const BASE_PAGE_SURFACE_SCALE = 2;
 const MAX_PAGE_SURFACE_EDGE = 8192;
+
+function getPreviewSurfaceSource(page) {
+  if (!page) return null;
+  const thumbnailCanvas = page.thumbnailCanvas ?? null;
+  const displayCanvas = page.displayCanvas ?? null;
+  const safeThumbnailCanvas = (
+    thumbnailCanvas
+    && thumbnailCanvas !== displayCanvas
+    && Math.max(thumbnailCanvas.width || 0, thumbnailCanvas.height || 0) <= SHARED_PREVIEW_SIZE * 4
+  )
+    ? thumbnailCanvas
+    : null;
+  return page.placedPreviewCanvas
+    ?? page.thumbnailSourceCanvas
+    ?? page.previewCanvas
+    ?? safeThumbnailCanvas
+    ?? null;
+}
+
+function getRawPreviewSurfaceSource(page) {
+  return page?.rawPreviewCanvas ?? page?.thumbnailSourceCanvas ?? null;
+}
+
+function getPageSurfaceHeight(scene, sideState, sourceCanvas, preferPreviewSources = !!scene?.preferPreviewSources) {
+  if (!preferPreviewSources) {
+    return Math.max(1, Math.round(sideState.pageRect.h));
+  }
+  return Math.max(1, Math.round(Math.min(sourceCanvas?.height || SHARED_PREVIEW_SIZE, SHARED_PREVIEW_SIZE)));
+}
+
+function getPageSurfaceMargins(scene, pageHeight, preferPreviewSources = !!scene?.preferPreviewSources) {
+  const margins = scene?.margins ?? null;
+  if (!margins || !preferPreviewSources) return margins;
+  const sourceHeight = Math.max(1, margins.pagePxH || pageHeight || 1);
+  const factor = Math.max(0.0001, pageHeight / sourceHeight);
+  return {
+    ...margins,
+    scale: margins.scale * factor,
+    pagePxW: margins.pagePxW * factor,
+    pagePxH: margins.pagePxH * factor,
+    innerPx: margins.innerPx * factor,
+    outerPx: margins.outerPx * factor,
+    topPx: margins.topPx * factor,
+    bottomPx: margins.bottomPx * factor,
+    twPx: margins.twPx * factor,
+    thPx: margins.thPx * factor,
+  };
+}
 
 function get2dContext(canvas, options) {
   return canvas.getContext("2d", options);
@@ -56,10 +105,21 @@ function setBackendName(name) {
   document.documentElement.dataset.rendererBackend = name;
 }
 
-function buildSideStates(margins, pages, hasPlacedPages, pageCount = 0) {
+function buildSideStates(margins, pages, hasPlacedPages, options = {}) {
+  const pageCount = options.pageCount ?? 0;
+  const preferPreviewSources = !!options.preferPreviewSources;
+  const preferPreviewBackFaceSources = options.preferPreviewBackFaceSources ?? preferPreviewSources;
+
   const build = (sideName, entry) => {
     const page = entry?.page ?? null;
     const showThroughPage = entry?.showThroughPage ?? null;
+    const surfaceSource = preferPreviewSources
+      ? getPreviewSurfaceSource(page)
+      : page?.displayCanvas ?? null;
+    const rawPreviewSource = getRawPreviewSurfaceSource(showThroughPage);
+    const rawDisplaySource = preferPreviewBackFaceSources
+      ? rawPreviewSource
+      : showThroughPage?.rawDisplayCanvas ?? showThroughPage?.thumbnailSourceCanvas ?? null;
     const geometry = getPageGeometry(
       margins,
       sideName,
@@ -83,13 +143,13 @@ function buildSideStates(margins, pages, hasPlacedPages, pageCount = 0) {
       pageIndex,
       showThroughPage,
       showThroughEffectEntry: entry?.showThroughEffectEntry ?? { pipeline: [], key: "" },
-      surfaceSource: page?.displayCanvas ?? null,
+      surfaceSource,
       translucencySource: page?.previewCanvas ?? page?.thumbnailSourceCanvas ?? null,
       // Show-through composition still happens in the renderer (it needs the
       // back-side placement of the neighboring page). Pin the raw source
       // bitmaps so the helperRenderer can apply its own placement math.
-      showThroughSurfaceSource: showThroughPage?.rawPreviewCanvas ?? showThroughPage?.thumbnailSourceCanvas ?? null,
-      backFaceSurfaceSource: showThroughPage?.rawDisplayCanvas ?? showThroughPage?.thumbnailSourceCanvas ?? null,
+      showThroughSurfaceSource: rawPreviewSource,
+      backFaceSurfaceSource: rawDisplaySource,
       isBlank,
       isEndPage,
       ...geometry,
@@ -555,16 +615,24 @@ export class WebGPUSpreadRenderer {
     for (const scene of scenes) {
       const sideStates = scene?.sideStates;
       if (!sideStates) continue;
+      const usePreviewSources = !!scene.preferPreviewSources;
+      const usePreviewBackFaceSources = scene.preferPreviewBackFaceSources ?? usePreviewSources;
+      const sceneSurfaceSource = usePreviewSources
+        ? getPreviewSurfaceSource(page)
+        : newSurfaceSource;
+      const sceneRawDisplay = usePreviewBackFaceSources
+        ? getRawPreviewSurfaceSource(page)
+        : newRawDisplay;
       for (const sideName of ["left", "right"]) {
         const sideState = sideStates[sideName];
         if (!sideState) continue;
         if (sideState.page === page) {
-          sideState.surfaceSource = newSurfaceSource;
+          sideState.surfaceSource = sceneSurfaceSource;
           sideState.translucencySource = newTranslucencySource;
         }
         if (sideState.showThroughPage === page) {
           sideState.showThroughSurfaceSource = newRawPreview;
-          sideState.backFaceSurfaceSource = newRawDisplay;
+          sideState.backFaceSurfaceSource = sceneRawDisplay;
         }
       }
     }
@@ -1267,7 +1335,11 @@ export class WebGPUSpreadRenderer {
     const previewZoom = Math.max(1, options.previewZoom || 1);
     const showPageBorder = options.showPageBorder !== false;
     const hasPlacedPages = !!pages;
-    const sideStates = buildSideStates(margins, pages, hasPlacedPages, options.pageCount ?? 0);
+    const sideStates = buildSideStates(margins, pages, hasPlacedPages, {
+      pageCount: options.pageCount ?? 0,
+      preferPreviewSources: !!options.preferPreviewSources,
+      preferPreviewBackFaceSources: options.preferPreviewBackFaceSources ?? !!options.preferPreviewSources,
+    });
 
     for (const sideName of ["left", "right"]) {
       const sideState = sideStates[sideName];
@@ -1296,6 +1368,8 @@ export class WebGPUSpreadRenderer {
       showPlaceholder,
       showPageBorder,
       previewZoom,
+      preferPreviewSources: !!options.preferPreviewSources,
+      preferPreviewBackFaceSources: options.preferPreviewBackFaceSources ?? !!options.preferPreviewSources,
       sideStates,
     };
   }
@@ -1325,6 +1399,15 @@ export class WebGPUSpreadRenderer {
       } else {
         active.push({ ...animation, progress });
       }
+    }
+
+    if (!active.length && completed.length && this.doneCallbacks.length) {
+      this.animations = [];
+      this.animationFrame = 0;
+      const callbacks = [...this.doneCallbacks];
+      this.doneCallbacks = [];
+      for (const callback of callbacks) callback();
+      return;
     }
 
     const currentScene = active.at(-1)?.toScene || this.baseScene || this.lastScene;
@@ -1600,17 +1683,20 @@ export class WebGPUSpreadRenderer {
 
     const effectKey = scene.effects[side]?.key || "";
     const crop = sideState.page.getCropFor(sourceCanvas);
+    const pageHeight = getPageSurfaceHeight(scene, sideState, sourceCanvas);
+    const surfaceMargins = getPageSurfaceMargins(scene, pageHeight);
+    const pageWidth = Math.max(1, Math.round(pageHeight * pageAspect));
     const drawKey = [
-      Math.round(sideState.pageRect.w),
-      Math.round(sideState.pageRect.h),
-      Math.round(scene.margins.pagePxW),
-      Math.round(scene.margins.pagePxH),
-      Math.round(scene.margins.innerPx),
-      Math.round(scene.margins.outerPx),
-      Math.round(scene.margins.topPx),
-      Math.round(scene.margins.bottomPx),
-      Math.round(scene.margins.twPx),
-      Math.round(scene.margins.thPx),
+      pageWidth,
+      pageHeight,
+      Math.round(surfaceMargins.pagePxW),
+      Math.round(surfaceMargins.pagePxH),
+      Math.round(surfaceMargins.innerPx),
+      Math.round(surfaceMargins.outerPx),
+      Math.round(surfaceMargins.topPx),
+      Math.round(surfaceMargins.bottomPx),
+      Math.round(surfaceMargins.twPx),
+      Math.round(surfaceMargins.thPx),
       side,
       crop.left,
       crop.top,
@@ -1633,9 +1719,9 @@ export class WebGPUSpreadRenderer {
       scene.display,
       {
         sourceCanvas,
-        margins: scene.margins,
+        margins: surfaceMargins,
         side,
-        pageHeight: Math.max(1, Math.round(sideState.pageRect.h)),
+        pageHeight,
         includePageColor: false,
       }
     );
@@ -1655,7 +1741,8 @@ export class WebGPUSpreadRenderer {
       sideState,
       side,
       sideState.showThroughSurfaceSource,
-      this.showThroughSurfaceCache
+      this.showThroughSurfaceCache,
+      { preferPreviewSurfaceSize: !!scene.preferPreviewSources }
     );
   }
 
@@ -1665,29 +1752,32 @@ export class WebGPUSpreadRenderer {
       sideState,
       side,
       sideState.backFaceSurfaceSource,
-      this.backFaceSurfaceCache
+      this.backFaceSurfaceCache,
+      { preferPreviewSurfaceSize: scene.preferPreviewBackFaceSources ?? !!scene.preferPreviewSources }
     );
   }
 
-  #getReferencedPageSurfaceCanvas(scene, sideState, side, sourceCanvas, cacheStore) {
+  #getReferencedPageSurfaceCanvas(scene, sideState, side, sourceCanvas, cacheStore, options = {}) {
     const showThroughPage = sideState.showThroughPage ?? null;
     if (!showThroughPage || !sourceCanvas) return this.emptyShowThroughCanvas;
 
     const crop = showThroughPage.getCropFor(sourceCanvas);
     const hiddenSide = side === "left" ? "right" : "left";
-    const pageHeight = Math.max(1, Math.round(sideState.pageRect.h));
+    const preferPreviewSurfaceSize = options.preferPreviewSurfaceSize ?? !!scene?.preferPreviewSources;
+    const pageHeight = getPageSurfaceHeight(scene, sideState, sourceCanvas, preferPreviewSurfaceSize);
+    const surfaceMargins = getPageSurfaceMargins(scene, pageHeight, preferPreviewSurfaceSize);
     const effectKey = sideState.showThroughEffectEntry?.key || "";
     const drawKey = [
       hiddenSide,
       pageHeight,
-      Math.round(scene.margins.pagePxW),
-      Math.round(scene.margins.pagePxH),
-      Math.round(scene.margins.innerPx),
-      Math.round(scene.margins.outerPx),
-      Math.round(scene.margins.topPx),
-      Math.round(scene.margins.bottomPx),
-      Math.round(scene.margins.twPx),
-      Math.round(scene.margins.thPx),
+      Math.round(surfaceMargins.pagePxW),
+      Math.round(surfaceMargins.pagePxH),
+      Math.round(surfaceMargins.innerPx),
+      Math.round(surfaceMargins.outerPx),
+      Math.round(surfaceMargins.topPx),
+      Math.round(surfaceMargins.bottomPx),
+      Math.round(surfaceMargins.twPx),
+      Math.round(surfaceMargins.thPx),
       crop.left,
       crop.top,
       crop.right,
@@ -1718,7 +1808,7 @@ export class WebGPUSpreadRenderer {
       scene.display,
       {
         sourceCanvas,
-        margins: scene.margins,
+        margins: surfaceMargins,
         side: hiddenSide,
         pageHeight,
         includePageColor: false,
