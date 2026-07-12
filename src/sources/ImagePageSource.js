@@ -109,6 +109,18 @@ export class ImagePageSource extends PageSource {
   /** @returns {number} Page count. */
   getPageCount() { return this._getPageCount(); }
 
+  getTargetHighResWindowPageCount({ currentPageCount = 1 } = {}) {
+    return Math.max(1, Math.round(Number(currentPageCount) || 1));
+  }
+
+  shouldRefreshPageSourceDuringAnimation(_index) {
+    return false;
+  }
+
+  shouldWarmTargetHighResBeforeNavigation(_targetSpread, _options = {}) {
+    return false;
+  }
+
   /**
    * @param {number} index Page index.
    * @returns {PageMetadata|null} Page metadata.

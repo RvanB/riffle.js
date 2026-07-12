@@ -26,9 +26,17 @@ export class NavigationController {
     this.animationDirection = 0;
   }
 
-  #kickoffHighResForSpread(spreadIndex) {
+  #kickoffHighResForSpread(spreadIndex, options = {}) {
     const v = this.viewer;
-    v.ensureTargetHighResWindow?.(spreadIndex);
+    if (v.source?.shouldWarmTargetHighResBeforeNavigation?.(spreadIndex, options) === false) return;
+    v.ensureTargetHighResWindow?.(spreadIndex, options);
+  }
+
+  #spreadPageIndices(spreadIndex) {
+    const v = this.viewer;
+    const { left, right } = v.book.spreadPageEntries(spreadIndex);
+    return [left.pageIndex, right.pageIndex]
+      .filter(pageIndex => pageIndex >= 0 && pageIndex < v.book.pages.length);
   }
 
   cancelQueuedSpreadTurns() {
@@ -54,7 +62,9 @@ export class NavigationController {
 
     this.cancelQueuedSpreadTurns();
     const token = this.queuedSpreadTurnToken;
-    this.#kickoffHighResForSpread(clampedTarget);
+    this.#kickoffHighResForSpread(clampedTarget, {
+      retainPageIndices: this.#spreadPageIndices(fromSpread),
+    });
 
     const nominalTotal = BASE_TURN_DURATION_MS + (distance - 1) * BASE_MULTI_SPREAD_TURN_INTERVAL_MS;
     const scale = Math.min(1, MAX_QUEUE_DURATION_MS / nominalTotal);
@@ -151,7 +161,11 @@ export class NavigationController {
       v.schedulePreviewRedraw();
     };
 
-    if (!options.fromQueuedJump) this.#kickoffHighResForSpread(clampedTarget);
+    if (!options.fromQueuedJump) {
+      this.#kickoffHighResForSpread(clampedTarget, {
+        retainPageIndices: this.#spreadPageIndices(fromSpread),
+      });
+    }
     startTurn();
   }
 }

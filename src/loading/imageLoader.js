@@ -44,16 +44,6 @@ function getRequestedSize(options = {}) {
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
-function nowMs() {
-  return typeof performance !== "undefined" && typeof performance.now === "function"
-    ? performance.now()
-    : Date.now();
-}
-
-function logImageDecode(message, details) {
-  console.log(`[Riffle] ${message}`, details);
-}
-
 const imageWorkerCall = createWorkerClient("./imageWorker.js", "Image", { maxInFlight: 1 });
 
 async function loadImageFileOnMainThread(file, options = {}) {
@@ -61,15 +51,6 @@ async function loadImageFileOnMainThread(file, options = {}) {
   if (!target) return createImageBitmap(file);
 
   let bitmap;
-  let usedResizeDecode = true;
-  const startedAt = nowMs();
-  const purpose = options.purpose || "image";
-  logImageDecode("Main thread requesting resized image decode", {
-    name: file?.name || "",
-    purpose,
-    target,
-    sizeBytes: file?.size || 0,
-  });
   try {
     bitmap = await createImageBitmap(file, {
       resizeWidth: target.width,
@@ -77,92 +58,31 @@ async function loadImageFileOnMainThread(file, options = {}) {
       resizeQuality: options.resizeQuality || "high",
     });
   } catch (_error) {
-    usedResizeDecode = false;
-    logImageDecode("Main thread image resize decode failed; falling back to full-res decode before downscale", {
-      name: file?.name || "",
-      purpose,
-      target,
-      elapsedMs: Math.round(nowMs() - startedAt),
-    });
     bitmap = await createImageBitmap(file);
   }
 
-  const decoded = { width: bitmap.width, height: bitmap.height };
-  const elapsedMs = Math.round(nowMs() - startedAt);
   if (bitmap.width === target.width && bitmap.height === target.height) {
-    logImageDecode("Main thread resized image decode returned target size", {
-      name: file?.name || "",
-      purpose,
-      target,
-      decoded,
-      elapsedMs,
-      usedResizeDecode,
-    });
     return bitmap;
   }
   if (bitmap.width <= target.width && bitmap.height <= target.height) {
-    logImageDecode("Main thread image decode returned smaller/equal source; no downscale needed", {
-      name: file?.name || "",
-      purpose,
-      target,
-      decoded,
-      elapsedMs,
-      usedResizeDecode,
-    });
     return bitmap;
   }
 
-  logImageDecode("Main thread image decode returned larger bitmap; downscaling after decode", {
-    name: file?.name || "",
-    purpose,
-    decoded,
-    target,
-    elapsedMs,
-    usedResizeDecode,
-  });
   const resized = await resizeBitmap(bitmap, target.width, target.height);
   bitmap.close();
-  logImageDecode("Main thread finished image downscale after decode", {
-    name: file?.name || "",
-    purpose,
-    target,
-    totalElapsedMs: Math.round(nowMs() - startedAt),
-  });
   return resized;
 }
 
 async function loadImagePreviewOnMainThread(file, maxEdge) {
-  const startedAt = nowMs();
-  logImageDecode("Main thread requesting full image decode for preview dimension fallback", {
-    name: file?.name || "",
-    maxEdge,
-    sizeBytes: file?.size || 0,
-  });
   const bitmap = await createImageBitmap(file);
   const originalWidth = bitmap.width;
   const originalHeight = bitmap.height;
   const { width, height } = computeTargetSize(originalWidth, originalHeight, maxEdge);
   if (width === originalWidth && height === originalHeight) {
-    logImageDecode("Main thread preview decode used original size", {
-      name: file?.name || "",
-      decoded: { width: originalWidth, height: originalHeight },
-      elapsedMs: Math.round(nowMs() - startedAt),
-    });
     return { canvas: bitmap, width: originalWidth, height: originalHeight };
   }
-  logImageDecode("Main thread image preview decoded full-res; downscaling preview after decode", {
-    name: file?.name || "",
-    decoded: { width: originalWidth, height: originalHeight },
-    target: { width, height },
-    elapsedMs: Math.round(nowMs() - startedAt),
-  });
   const canvas = await resizeBitmap(bitmap, width, height);
   bitmap.close();
-  logImageDecode("Main thread finished preview downscale after full decode", {
-    name: file?.name || "",
-    target: { width, height },
-    totalElapsedMs: Math.round(nowMs() - startedAt),
-  });
   return {
     canvas,
     width: originalWidth,
@@ -185,18 +105,11 @@ export async function loadImageFile(file, options = {}) {
   try {
     return await imageWorkerCall("loadImageFile", {
       file,
-      purpose: options.purpose || "image",
       targetWidth: target.width,
       targetHeight: target.height,
       resizeQuality: options.resizeQuality || "high",
     }, { priority: options.priority ?? "normal" });
   } catch (error) {
-    logImageDecode("Image worker decode failed; falling back to main thread", {
-      name: file?.name || "",
-      purpose: options.purpose || "image",
-      target,
-      error: error?.message || String(error),
-    });
     return loadImageFileOnMainThread(file, options);
   }
 }
@@ -214,11 +127,6 @@ export async function loadImagePreview(file, maxEdge, options = {}) {
   try {
     return await imageWorkerCall("loadImagePreview", { file, maxEdge }, { priority: options.priority ?? "normal" });
   } catch (error) {
-    logImageDecode("Image worker preview decode failed; falling back to main thread", {
-      name: file?.name || "",
-      maxEdge,
-      error: error?.message || String(error),
-    });
     return loadImagePreviewOnMainThread(file, maxEdge);
   }
 }

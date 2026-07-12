@@ -116,6 +116,42 @@ export class PageSource {
   }
 
   /**
+   * Returns how many pages should be retained/requested at target resolution.
+   *
+   * Sources can tune this for their loading cost model. PDF renderers can
+   * cheaply sample at the destination size, while image sources may prefer
+   * only the currently-visible pages to avoid background decode pressure.
+   *
+   * @param {Object} [options={}] Window sizing context.
+   * @param {number} [options.defaultCount] Viewer default page count.
+   * @returns {number} Target-resolution warm window page count.
+   */
+  getTargetHighResWindowPageCount({ defaultCount = 6 } = {}) {
+    return defaultCount;
+  }
+
+  /**
+   * Whether the renderer should refresh an animating page source immediately.
+   *
+   * @param {number} _index Page index.
+   * @returns {boolean} True when mid-animation source refreshes are desirable.
+   */
+  shouldRefreshPageSourceDuringAnimation(_index) {
+    return true;
+  }
+
+  /**
+   * Whether a navigation should start target-resolution loading before turn.
+   *
+   * @param {number} _targetSpread Destination spread index.
+   * @param {Object} [_options={}] Navigation context.
+   * @returns {boolean} True when pre-turn target-res warming is useful.
+   */
+  shouldWarmTargetHighResBeforeNavigation(_targetSpread, _options = {}) {
+    return true;
+  }
+
+  /**
    * Returns the target preview bitmap size for a page.
    *
    * @param {number} index Page index.

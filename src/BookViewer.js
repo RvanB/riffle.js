@@ -12,10 +12,6 @@ const DEFAULT_LAYOUT = {
 };
 const TARGET_HIGH_RES_WINDOW_PAGES = 6;
 
-function isImagePage(page) {
-  return page?.metadata?.source?.type === "image";
-}
-
 /**
  * Options for {@link BookViewer}.
  *
@@ -286,13 +282,14 @@ export class BookViewer {
   ensureTargetHighResWindow(targetSpread = this.navigationController.getEffectiveSpread(), {
     currentPriority = true,
     adjacentPriority = false,
+    retainPageIndices = [],
   } = {}) {
     const pageIndices = this.#centeredHighResWindowPageIndices(targetSpread);
     if (!pageIndices.length) return pageIndices;
 
     const currentPages = new Set(this.#spreadPageIndices(targetSpread));
     const targetPagePixels = this.getHighResTargetPagePixels();
-    this.lazyPageLoader.retainHighResPages(pageIndices);
+    this.lazyPageLoader.retainHighResPages([...new Set([...pageIndices, ...retainPageIndices])]);
 
     const requestOrder = [...pageIndices].sort((a, b) => {
       const aCurrent = currentPages.has(a);
@@ -389,11 +386,18 @@ export class BookViewer {
   #centeredHighResWindowPageIndices(targetSpread) {
     const pageCount = this.book.pages.length;
     const maxHighResPages = Math.max(0, Math.floor(Number(this.lazyPageLoader.maxHighResPages) || 0));
-    const desiredCount = Math.min(pageCount, TARGET_HIGH_RES_WINDOW_PAGES, maxHighResPages);
-    if (desiredCount <= 0) return [];
-
     const currentPages = this.#spreadPageIndices(targetSpread);
     if (!currentPages.length) return [];
+    const sourceWindowCount = this.source?.getTargetHighResWindowPageCount?.({
+      targetSpread,
+      currentPageCount: currentPages.length,
+      currentPageIndices: currentPages,
+      defaultCount: TARGET_HIGH_RES_WINDOW_PAGES,
+      maxHighResPages,
+      pageCount,
+    }) ?? TARGET_HIGH_RES_WINDOW_PAGES;
+    const desiredCount = Math.min(pageCount, Math.max(0, Math.floor(Number(sourceWindowCount) || 0)), maxHighResPages);
+    if (desiredCount <= 0) return [];
 
     const pageIndices = [...new Set(currentPages)].sort((a, b) => a - b).slice(0, desiredCount);
     let start = pageIndices[0];
@@ -439,7 +443,9 @@ export class BookViewer {
       // the fresh bitmap before the renderer reads through ViewerPage's
       // getter chain.
       this.emit("pageready", { pageIndex, animating: true });
-      if (viewerPage && !isImagePage(viewerPage)) this.spreadRenderer.refreshPageSource?.(viewerPage);
+      if (viewerPage && this.source?.shouldRefreshPageSourceDuringAnimation?.(pageIndex) !== false) {
+        this.spreadRenderer.refreshPageSource?.(viewerPage);
+      }
       return;
     }
     // Emit first so host listeners can populate composed canvases / placed
