@@ -28,14 +28,7 @@ export class NavigationController {
 
   #kickoffHighResForSpread(spreadIndex) {
     const v = this.viewer;
-    if (spreadIndex < 0 || spreadIndex >= v.book.numSpreads()) return;
-    const targetPagePixels = v.getHighResTargetPagePixels?.() ?? null;
-    const { left, right } = v.book.spreadPageEntries(spreadIndex);
-    for (const pageIndex of [left.pageIndex, right.pageIndex]) {
-      if (pageIndex < 0) continue;
-      if (v.lazyPageLoader.isPageHighResReady(pageIndex, v.contentZoom, { targetPagePixels })) continue;
-      v.lazyPageLoader.ensurePageHighRes(pageIndex, v.contentZoom, { targetPagePixels });
-    }
+    v.ensureTargetHighResWindow?.(spreadIndex);
   }
 
   cancelQueuedSpreadTurns() {
@@ -100,6 +93,8 @@ export class NavigationController {
     const fromSpread = this.getEffectiveSpread();
     const direction = clampedTarget > fromSpread ? 1 : -1;
 
+    if (v.spreadRenderer.isAnimating && this.animationDirection && direction !== this.animationDirection) return;
+    v.lazyPageLoader.setPreviewPaused(true);
     v.emit("beforenavigate", { fromSpread, toSpread: clampedTarget, preferredPageIndex });
     v.lazyPageLoader.ensureSpreadLoaded(clampedTarget, 1, { allowHighRes: false });
 
@@ -113,10 +108,10 @@ export class NavigationController {
       v.emit("animationend", {});
       v.emit("spreadchange", { spreadIndex: clampedTarget });
       v.redraw();
+      v.lazyPageLoader.setPreviewPaused(false);
       return;
     }
 
-    if (v.spreadRenderer.isAnimating && this.animationDirection && direction !== this.animationDirection) return;
     const turnStartToken = ++this.pendingTurnStartToken;
     const startTurn = () => {
       if (this.pendingTurnStartToken !== turnStartToken) return;
@@ -137,6 +132,7 @@ export class NavigationController {
             v.emit("spreadchange", { spreadIndex: v.currentSpread });
             v.redraw();
             v.lazyPageLoader.flushEvictions();
+            v.lazyPageLoader.setPreviewPaused(false);
             v.schedulePreviewRedraw();
           };
 

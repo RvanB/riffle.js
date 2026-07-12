@@ -16,7 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "esbuild src/index.js --bundle --format=esm --minify --sourcemap --outfile=dist/riffle.min.js && esbuild src/loading/pdfWorker.js --bundle --format=esm --minify --sourcemap --outfile=dist/pdfWorker.js && esbuild src/loading/pdfiumWorker.js --bundle --format=esm --minify --sourcemap --outfile=dist/pdfiumWorker.js",
+    "build": "esbuild src/index.js --bundle --format=esm --minify --sourcemap --outfile=dist/riffle.min.js && esbuild src/loading/pdfWorker.js --bundle --format=esm --minify --sourcemap --outfile=dist/pdfWorker.js && esbuild src/loading/pdfiumWorker.js --bundle --format=esm --minify --sourcemap --outfile=dist/pdfiumWorker.js && esbuild src/loading/imageWorker.js --bundle --format=esm --minify --sourcemap --outfile=dist/imageWorker.js",
     "docs": "rm -rf docs && jsdoc -c jsdoc.json && ./scripts/prune-docs.sh"
   },
   "devDependencies": {

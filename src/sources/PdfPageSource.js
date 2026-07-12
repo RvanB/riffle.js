@@ -1,7 +1,61 @@
 import { PageSource } from "./PageSource.js";
-import { loadPdfDocument, getPdfPageAspectRatio, getPdfPageInfo } from "../loading/pdfLoader.js";
+import {
+  loadPdfDocument,
+  getPdfPageAspectRatio,
+  getPdfPageInfo,
+  renderPdfPage,
+  requestPdfDocumentCleanup,
+} from "../loading/pdfLoader.js";
 
 const ASPECT_RATIO_WARNING_EPSILON = 0.001;
+const DEFAULT_PDF_MIN_VISIBLE_RENDER_SCALE = 0.25;
+
+function getVisiblePdfRenderScale(page, targetPagePixels = null) {
+  const width = Number(targetPagePixels?.width) || 0;
+  const height = Number(targetPagePixels?.height) || 0;
+  const pdfWidth = Number(page?.pdfPointWidth) || 0;
+  const pdfHeight = Number(page?.pdfPointHeight) || 0;
+  if (width <= 0 || height <= 0 || pdfWidth <= 0 || pdfHeight <= 0) return 0;
+  return Math.max(width / pdfWidth, height / pdfHeight);
+}
+
+function capPdfRenderScale(scale, { pdfMaxRenderScale = 1.5 } = {}) {
+  return pdfMaxRenderScale > 0 ? Math.min(scale, pdfMaxRenderScale) : scale;
+}
+
+function getPdfRenderScaleForTarget(page, targetPagePixels, {
+  pdfMaxRenderScale = 1.5,
+  headroom = 1,
+  minScale = 0,
+} = {}) {
+  const visibleScale = getVisiblePdfRenderScale(page, targetPagePixels);
+  if (visibleScale <= 0) return 0;
+  return capPdfRenderScale(Math.max(minScale, visibleScale) * headroom, { pdfMaxRenderScale });
+}
+
+function getRequiredPdfRenderScale(page, previewZoom = 1, {
+  targetPagePixels = null,
+  targetPdfRenderScale = 0,
+  pdfRenderScale = 1.5,
+  pdfRenderScaleHeadroom = 1.1,
+  pdfMaxRenderScale = 1.5,
+  devicePixelRatio = 1,
+} = {}) {
+  const visibleScale = getPdfRenderScaleForTarget(page, targetPagePixels, {
+    pdfMaxRenderScale,
+    headroom: pdfRenderScaleHeadroom,
+    minScale: DEFAULT_PDF_MIN_VISIBLE_RENDER_SCALE,
+  });
+  if (visibleScale > 0) return visibleScale;
+  const highResPixelRatio = Math.max(1, Number(devicePixelRatio) || 1);
+  const minimumHighResScale = pdfRenderScale * highResPixelRatio;
+  const requestedScale = Math.max(
+    minimumHighResScale,
+    targetPdfRenderScale || 0,
+    pdfRenderScale * Math.max(1, previewZoom || 1) * highResPixelRatio
+  ) * pdfRenderScaleHeadroom;
+  return capPdfRenderScale(requestedScale, { pdfMaxRenderScale });
+}
 
 // A "Page" shaped to match what LazyPageLoader writes to (mutable
 // srcCanvas/previewCanvas fields, a `source` describing the backing
@@ -60,9 +114,9 @@ function warnIfMixedPageAspectRatios(aspectRatios) {
 /**
  * PDF-backed page source.
  *
- * The PDF is rasterized lazily by the viewer's lazy page loader. This source
- * describes the page set, exposes an internal mutable book for the loader,
- * and warns in the console when page aspect ratios differ.
+ * The source describes the page set, owns PDF preview/high-res rasterization,
+ * exposes an internal mutable book for bitmap cache fields, and warns in the
+ * console when page aspect ratios differ.
  */
 export class PdfPageSource extends PageSource {
   constructor() {
@@ -147,6 +201,76 @@ export class PdfPageSource extends PageSource {
     const page = this.pages[index] ?? null;
     if (!page) return null;
     return { aspectRatio: page.aspectRatio, passthrough: page };
+  }
+
+  async getPagePreview(index, {
+    targetPagePixels = this.getPagePreviewTarget(index),
+    priority = "normal",
+    pdfPreviewSourceScale = 0.5,
+    pdfMaxRenderScale = 1.5,
+  } = {}) {
+    const page = this.pages[index];
+    if (!page) return null;
+    const previewScale = getPdfRenderScaleForTarget(page, targetPagePixels, { pdfMaxRenderScale }) || pdfPreviewSourceScale;
+    const previewMaxEdge = Math.max(targetPagePixels.width, targetPagePixels.height);
+    return renderPdfPage(
+      page.source.pdfDoc,
+      page.source.pageNum,
+      previewScale,
+      { downscaleTo: previewMaxEdge, priority }
+    );
+  }
+
+  getPageHighResStatus(index, {
+    previewZoom = 1,
+    targetPagePixels = null,
+    targetPdfRenderScale = 0,
+    renderConfig = {},
+  } = {}) {
+    const page = this.pages[index];
+    if (!page) return { ready: false, shouldLoad: false, request: null };
+    const requestedScale = getRequiredPdfRenderScale(page, previewZoom, {
+      targetPagePixels,
+      targetPdfRenderScale,
+      ...renderConfig,
+    });
+    page.requestedPdfRenderScale = page.loading
+      ? Math.max(page.requestedPdfRenderScale || 0, requestedScale)
+      : requestedScale;
+    if (page.loading) return { ready: false, shouldLoad: false, request: null };
+    const loadedScale = page.loadedPdfRenderScale || 0;
+    if (page.srcCanvas && loadedScale >= requestedScale) {
+      return { ready: true, shouldLoad: false, request: null };
+    }
+    const renderScale = capPdfRenderScale(page.requestedPdfRenderScale || requestedScale, renderConfig);
+    return {
+      ready: false,
+      shouldLoad: true,
+      request: {
+        renderScale,
+        requestedScale,
+        priority: renderConfig.priority,
+      },
+    };
+  }
+
+  async getPageHighRes(index, { renderScale, priority = "normal" } = {}) {
+    const page = this.pages[index];
+    if (!page) return null;
+    return renderPdfPage(page.source.pdfDoc, page.source.pageNum, renderScale, { priority });
+  }
+
+  commitPageHighRes(index, { page = this.pages[index], request = {}, bitmap = null } = {}) {
+    if (!page) return;
+    page.loadedPdfRenderScale = request.renderScale || page.requestedPdfRenderScale || page.loadedPdfRenderScale || 0;
+    if (bitmap) page.aspectRatio = bitmap.width / bitmap.height;
+  }
+
+  cleanupPageHighRes(index, { page = this.pages[index] } = {}) {
+    if (!page) return;
+    page.loadedPdfRenderScale = 0;
+    page.requestedPdfRenderScale = 0;
+    requestPdfDocumentCleanup(page.source.pdfDoc);
   }
 
   /**

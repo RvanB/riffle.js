@@ -1,14 +1,19 @@
 import { SHARED_PREVIEW_SIZE } from "../previewSizing.js";
-import { loadImageFile } from "./imageLoader.js";
-import { renderPdfPage, requestPdfDocumentCleanup } from "./pdfLoader.js";
+import { comparePriority } from "./workerClient.js";
 
 const DEFAULT_PDF_RENDER_SCALE_HEADROOM = 1.1;
 const DEFAULT_PDF_MAX_RENDER_SCALE = 1.5;
 const DEFAULT_PDF_PREVIEW_FALLBACK_SCALE = 0.5;
-const DEFAULT_PDF_MIN_VISIBLE_RENDER_SCALE = 0.25;
+const PREVIEW_PRIORITIES = new Set(["critical", "visible", "high", "normal", "background"]);
 
 function closeBitmap(bitmap) {
   if (bitmap && typeof bitmap.close === "function") bitmap.close();
+}
+
+function normalizePreviewPriority(priority) {
+  if (priority === true) return "visible";
+  if (priority === false || priority == null) return "background";
+  return PREVIEW_PRIORITIES.has(priority) ? priority : "normal";
 }
 
 /**
@@ -27,6 +32,7 @@ function closeBitmap(bitmap) {
  */
 export class LazyPageLoader {
   constructor(book, onPageReady, {
+    source = null,
     maxHighResPages = 8,
     pdfRenderScale = 1.5,
     pdfRenderScaleHeadroom = DEFAULT_PDF_RENDER_SCALE_HEADROOM,
@@ -35,6 +41,7 @@ export class LazyPageLoader {
     pdfPreviewMaxEdge = SHARED_PREVIEW_SIZE,
   } = {}) {
     this.book = book;
+    this.source = source;
     this.onPageReady = onPageReady;
     this.pdfRenderScale = pdfRenderScale;
     this.pdfRenderScaleHeadroom = Math.max(1, Number(pdfRenderScaleHeadroom) || DEFAULT_PDF_RENDER_SCALE_HEADROOM);
@@ -46,9 +53,10 @@ export class LazyPageLoader {
     // LRU: pageIndex -> {} (Map iteration is insertion-order; re-insert to bump).
     this.highResLru = new Map();
     this.evictionsDeferred = false;
-    this.previewQueue = [];
+    this.previewQueue = new Map();
     this.previewQueued = new Set();
     this.previewRendering = false;
+    this.previewPaused = false;
     this.pageReadyWaiters = new Map();
   }
 
@@ -62,51 +70,21 @@ export class LazyPageLoader {
       * this.#getHighResPixelRatio();
   }
 
-  #capPdfRenderScale(scale) {
-    return this.pdfMaxRenderScale > 0 ? Math.min(scale, this.pdfMaxRenderScale) : scale;
-  }
-
-  #getVisiblePdfRenderScale(pageIndex, targetPagePixels = null) {
-    const page = this.book.pages[pageIndex];
-    const width = Number(targetPagePixels?.width) || 0;
-    const height = Number(targetPagePixels?.height) || 0;
-    const pdfWidth = Number(page?.pdfPointWidth) || 0;
-    const pdfHeight = Number(page?.pdfPointHeight) || 0;
-    if (width <= 0 || height <= 0 || pdfWidth <= 0 || pdfHeight <= 0) return 0;
-    return Math.max(width / pdfWidth, height / pdfHeight);
-  }
-
-  #getPdfRenderScaleForTarget(pageIndex, targetPagePixels, { headroom = 1, minScale = 0 } = {}) {
-    const visibleScale = this.#getVisiblePdfRenderScale(pageIndex, targetPagePixels);
-    if (visibleScale <= 0) return 0;
-    return this.#capPdfRenderScale(Math.max(minScale, visibleScale) * headroom);
-  }
-
   #getPreviewTargetPagePixels(pageIndex) {
-    const page = this.book.pages[pageIndex];
-    const height = Math.max(1, Math.round(Number(this.pdfPreviewMaxEdge) || SHARED_PREVIEW_SIZE));
-    const aspectRatio = Math.max(0.01, Number(page?.aspectRatio) || 1);
-    return {
-      width: Math.max(1, Math.round(height * aspectRatio)),
-      height,
-    };
+    return this.source?.getPagePreviewTarget?.(pageIndex, { maxEdge: this.pdfPreviewMaxEdge })
+      ?? { width: SHARED_PREVIEW_SIZE, height: SHARED_PREVIEW_SIZE };
   }
 
-  #getRequiredPageRenderScale(pageIndex, previewZoom = 1, { targetPagePixels = null, targetPdfRenderScale = 0 } = {}) {
-    const page = this.book.pages[pageIndex];
-    if (!page || page.source?.type !== "pdf") return 0;
-    const visibleScale = this.#getPdfRenderScaleForTarget(pageIndex, targetPagePixels, {
-      headroom: this.pdfRenderScaleHeadroom,
-      minScale: DEFAULT_PDF_MIN_VISIBLE_RENDER_SCALE,
-    });
-    if (visibleScale > 0) return visibleScale;
-    const minimumHighResScale = this.pdfRenderScale * this.#getHighResPixelRatio();
-    const requestedScale = Math.max(
-      minimumHighResScale,
-      targetPdfRenderScale || 0,
-      this.#getTargetPdfRenderScale(previewZoom)
-    ) * this.pdfRenderScaleHeadroom;
-    return this.#capPdfRenderScale(requestedScale);
+  #getRenderConfig(extra = {}) {
+    return {
+      pdfRenderScale: this.pdfRenderScale,
+      pdfRenderScaleHeadroom: this.pdfRenderScaleHeadroom,
+      pdfMaxRenderScale: this.pdfMaxRenderScale,
+      pdfPreviewSourceScale: this.pdfPreviewSourceScale,
+      pdfPreviewMaxEdge: this.pdfPreviewMaxEdge,
+      devicePixelRatio: this.#getHighResPixelRatio(),
+      ...extra,
+    };
   }
 
   #resolvePageReadyWaiters(pageIndex) {
@@ -156,11 +134,38 @@ export class LazyPageLoader {
     this.setEvictionsDeferred(false);
   }
 
+  retainHighResPages(pageIndices) {
+    if (this.evictionsDeferred) return;
+    const keep = new Set(pageIndices);
+    for (const pageIndex of [...this.highResLru.keys()]) {
+      if (keep.has(pageIndex)) continue;
+      this.highResLru.delete(pageIndex);
+      this.#unloadPage(pageIndex);
+    }
+  }
+
+  touchHighResPage(pageIndex) {
+    this.#touchHighRes(pageIndex);
+  }
+
+  setPreviewPaused(paused) {
+    const wasPaused = this.previewPaused;
+    this.previewPaused = !!paused;
+    if (wasPaused && !this.previewPaused) {
+      this.#drainPreviewQueue();
+    }
+  }
+
+  setPreviewBackgroundPaused(paused) {
+    this.setPreviewPaused(paused);
+  }
+
   reset() {
     this.lastEnsuredPreviewZoom = 1;
-    this.previewQueue = [];
+    this.previewQueue.clear();
     this.previewQueued.clear();
     this.previewRendering = false;
+    this.previewPaused = false;
     for (const pageIndex of this.highResLru.keys()) {
       this.#unloadPage(pageIndex);
     }
@@ -168,7 +173,13 @@ export class LazyPageLoader {
     this.evictionsDeferred = false;
   }
 
-  ensureSpreadLoaded(spreadIndex, previewZoom = 1, { allowHighRes = true, priority = false, targetPagePixels = null } = {}) {
+  ensureSpreadLoaded(spreadIndex, previewZoom = 1, {
+    allowHighRes = true,
+    priority = false,
+    targetPagePixels = null,
+    previewPriority = "visible",
+    adjacentPreviewPriority = "background",
+  } = {}) {
     this.lastEnsuredPreviewZoom = Math.max(1, previewZoom || 1);
     const targetPdfRenderScale = this.#getTargetPdfRenderScale(this.lastEnsuredPreviewZoom);
     const spreadCount = this.book.numSpreads();
@@ -179,13 +190,13 @@ export class LazyPageLoader {
     ) {
       const { left, right } = this.book.spreadPageEntries(spread);
       if (left.pageIndex >= 0) {
-        this.#ensurePreviewLoaded(left.pageIndex, spread === spreadIndex);
+        this.#ensurePreviewLoaded(left.pageIndex, spread === spreadIndex ? previewPriority : adjacentPreviewPriority);
         if (allowHighRes && spread === spreadIndex) {
           this.#ensurePageLoaded(left.pageIndex, targetPdfRenderScale, { priority, targetPagePixels });
         }
       }
       if (right.pageIndex >= 0 && right.pageIndex < this.book.pages.length) {
-        this.#ensurePreviewLoaded(right.pageIndex, spread === spreadIndex);
+        this.#ensurePreviewLoaded(right.pageIndex, spread === spreadIndex ? previewPriority : adjacentPreviewPriority);
         if (allowHighRes && spread === spreadIndex) {
           this.#ensurePageLoaded(right.pageIndex, targetPdfRenderScale, { priority, targetPagePixels });
         }
@@ -193,16 +204,17 @@ export class LazyPageLoader {
     }
   }
 
-  warmAllPreviews() {
+  warmAllPreviews({ includeImages = true, priority = "background" } = {}) {
     for (let pageIndex = 0; pageIndex < this.book.pages.length; pageIndex += 1) {
-      this.#ensurePreviewLoaded(pageIndex);
+      if (!includeImages && this.source?.getPageKind?.(pageIndex) === "image") continue;
+      this.#ensurePreviewLoaded(pageIndex, priority);
     }
   }
 
   ensurePageHighRes(pageIndex, previewZoom = 1, { priority = true, targetPagePixels = null } = {}) {
     if (pageIndex < 0 || pageIndex >= this.book.pages.length) return Promise.resolve(false);
     const targetPdfRenderScale = this.#getTargetPdfRenderScale(previewZoom);
-    this.#ensurePreviewLoaded(pageIndex, true);
+    this.#ensurePreviewLoaded(pageIndex, "critical");
     const loadPromise = this.#ensurePageLoaded(pageIndex, targetPdfRenderScale, { priority, targetPagePixels });
     if (this.isPageHighResReady(pageIndex, previewZoom, { targetPagePixels })) return Promise.resolve(true);
     return new Promise(resolve => {
@@ -216,61 +228,95 @@ export class LazyPageLoader {
   isPageHighResReady(pageIndex, previewZoom = 1, { targetPagePixels = null } = {}) {
     const page = this.book.pages[pageIndex];
     if (!page) return false;
-    if (page.source?.type === "image") {
-      return !!page.srcCanvas;
-    }
-    if (page.source?.type !== "pdf") return !!page.displayCanvas;
-    const requiredScale = this.#getRequiredPageRenderScale(pageIndex, previewZoom, { targetPagePixels });
-    return !!page.srcCanvas && (page.loadedPdfRenderScale || 0) >= requiredScale;
+    return !!this.source?.getPageHighResStatus?.(pageIndex, {
+      page,
+      previewZoom,
+      targetPagePixels,
+      targetPdfRenderScale: this.#getTargetPdfRenderScale(previewZoom),
+      renderConfig: this.#getRenderConfig(),
+    })?.ready;
   }
 
-  #ensurePreviewLoaded(pageIndex, prioritize = false) {
+  #ensurePreviewLoaded(pageIndex, priority = "background") {
     const page = this.book.pages[pageIndex];
-    if (!page || page.source?.type !== "pdf" || page.previewCanvas || this.previewQueued.has(pageIndex)) return;
+    if (!page || page.previewCanvas || !this.source?.getPagePreview) return;
+    const normalizedPriority = normalizePreviewPriority(priority);
+    if (this.previewQueued.has(pageIndex)) {
+      const existing = this.previewQueue.get(pageIndex);
+      if (existing && comparePriority(normalizedPriority, existing.priority) < 0) {
+        this.previewQueue.set(pageIndex, { pageIndex, priority: normalizedPriority });
+      }
+      this.#drainPreviewQueue();
+      return;
+    }
     this.previewQueued.add(pageIndex);
-    if (prioritize) this.previewQueue.unshift(pageIndex);
-    else this.previewQueue.push(pageIndex);
+    this.previewQueue.set(pageIndex, { pageIndex, priority: normalizedPriority });
     this.#drainPreviewQueue();
+  }
+
+  #canRunPreviewEntry(entry) {
+    return !this.previewPaused;
+  }
+
+  #shiftNextPreviewEntry() {
+    let selectedPageIndex = -1;
+    let selectedEntry = null;
+    for (const [pageIndex, entry] of this.previewQueue) {
+      if (!this.#canRunPreviewEntry(entry)) continue;
+      if (!selectedEntry || comparePriority(entry.priority, selectedEntry.priority) < 0) {
+        selectedPageIndex = pageIndex;
+        selectedEntry = entry;
+      }
+    }
+    if (!selectedEntry) return null;
+    this.previewQueue.delete(selectedPageIndex);
+    this.previewQueued.delete(selectedPageIndex);
+    return selectedEntry;
+  }
+
+  #hasRunnablePreviewEntry() {
+    for (const entry of this.previewQueue.values()) {
+      if (this.#canRunPreviewEntry(entry)) return true;
+    }
+    return false;
   }
 
   async #drainPreviewQueue() {
     if (this.previewRendering) return;
+    if (!this.#hasRunnablePreviewEntry()) return;
     this.previewRendering = true;
-    while (this.previewQueue.length) {
-      const pageIndex = this.previewQueue.shift();
-      this.previewQueued.delete(pageIndex);
+    while (this.#hasRunnablePreviewEntry()) {
+      const entry = this.#shiftNextPreviewEntry();
+      if (!entry) break;
+      const { pageIndex, priority } = entry;
       const page = this.book.pages[pageIndex];
-      if (!page || page.previewCanvas || page.source?.type !== "pdf") continue;
+      if (!page || page.previewCanvas) continue;
       try {
         const targetPagePixels = this.#getPreviewTargetPagePixels(pageIndex);
-        const previewScale = this.#getPdfRenderScaleForTarget(pageIndex, targetPagePixels) || this.pdfPreviewSourceScale;
-        const previewMaxEdge = Math.max(targetPagePixels.width, targetPagePixels.height);
-        const previewBitmap = await renderPdfPage(
-          page.source.pdfDoc,
-          page.source.pageNum,
-          previewScale,
-          { downscaleTo: previewMaxEdge }
-        );
+        const previewBitmap = await this.source?.getPagePreview?.(pageIndex, {
+          page,
+          targetPagePixels,
+          maxEdge: this.pdfPreviewMaxEdge,
+          priority,
+          ...this.#getRenderConfig(),
+        });
+        if (!previewBitmap) continue;
         page.previewCanvas = previewBitmap;
         if (!page.thumbnailSourceCanvas) page.thumbnailSourceCanvas = previewBitmap;
         this.onPageReady?.(pageIndex);
         this.#resolvePageReadyWaiters(pageIndex);
       } catch (error) {
-        console.error(`Failed to render PDF preview ${page.source?.pageNum}:`, error);
+        const label = this.source?.getPageKind?.(pageIndex) || page.source?.type || "page";
+        console.error(`Failed to load ${label}:`, error);
       }
     }
     this.previewRendering = false;
+    if (this.#hasRunnablePreviewEntry()) this.#drainPreviewQueue();
   }
 
   async #ensurePageLoaded(pageIndex, targetPdfRenderScale = this.pdfRenderScale, { priority = false, targetPagePixels = null } = {}) {
     const page = this.book.pages[pageIndex];
     if (!page) return;
-    if (page.source?.type === "image") {
-      this.#touchHighRes(pageIndex);
-      await this.#ensureImagePageLoaded(pageIndex);
-      return;
-    }
-    if (page.source?.type !== "pdf") return;
 
     // Touch the LRU first so the page is marked as wanted before we kick off
     // (or check for) a render. If a previously in-flight render for this page
@@ -278,25 +324,30 @@ export class LazyPageLoader {
     // still wanted.
     this.#touchHighRes(pageIndex);
 
-    const requestedScale = this.#getRequiredPageRenderScale(pageIndex, this.lastEnsuredPreviewZoom, {
+    const requestPriority = priority === true ? "high" : priority === false ? "background" : priority;
+    const status = this.source?.getPageHighResStatus?.(pageIndex, {
+      page,
+      previewZoom: this.lastEnsuredPreviewZoom,
       targetPagePixels,
       targetPdfRenderScale,
-    });
-    page.requestedPdfRenderScale = page.loading
-      ? Math.max(page.requestedPdfRenderScale || 0, requestedScale)
-      : requestedScale;
-    if (page.loading) return;
-    if (page.srcCanvas && (page.loadedPdfRenderScale || this.pdfRenderScale) >= requestedScale) return;
+      renderConfig: this.#getRenderConfig({ priority: requestPriority }),
+    }) ?? { ready: false, shouldLoad: false, request: null };
+    if (status.ready || !status.shouldLoad) return;
 
     page.loading = true;
     try {
-      const renderScale = this.#capPdfRenderScale(page.requestedPdfRenderScale || requestedScale);
-      const bitmap = await renderPdfPage(page.source.pdfDoc, page.source.pageNum, renderScale, { priority });
+      const bitmap = await this.source.getPageHighRes(pageIndex, {
+        ...status.request,
+        priority: requestPriority,
+      });
+      if (!bitmap) {
+        page.loading = false;
+        return;
+      }
       if (!this.#isWantedHighRes(pageIndex)) {
         // Page was evicted from the LRU while we were rendering.
         page.loading = false;
         closeBitmap(bitmap);
-        requestPdfDocumentCleanup(page.source.pdfDoc);
         return;
       }
       const previousSrcCanvas = page.srcCanvas && page.srcCanvas !== bitmap ? page.srcCanvas : null;
@@ -304,8 +355,8 @@ export class LazyPageLoader {
       if (page.previewCanvas && !page.thumbnailSourceCanvas) {
         page.thumbnailSourceCanvas = page.previewCanvas;
       }
-      page.loadedPdfRenderScale = renderScale;
       page.aspectRatio = bitmap.width / bitmap.height;
+      this.source.commitPageHighRes?.(pageIndex, { page, bitmap, request: status.request });
       page.loading = false;
       this.onPageReady?.(pageIndex);
       // Close the previous bitmap AFTER onPageReady so that the renderer has
@@ -315,37 +366,15 @@ export class LazyPageLoader {
       if (previousSrcCanvas) closeBitmap(previousSrcCanvas);
       this.#resolvePageReadyWaiters(pageIndex);
       if (!page.previewCanvas) {
-        setTimeout(() => this.#ensurePreviewLoaded(pageIndex, true), 0);
+        setTimeout(() => this.#ensurePreviewLoaded(pageIndex, "visible"), 0);
       }
-      if ((page.requestedPdfRenderScale || renderScale) > renderScale + 1e-3) {
-        setTimeout(() => this.#ensurePageLoaded(pageIndex, page.requestedPdfRenderScale, { priority: false }), 0);
+      if (!this.isPageHighResReady(pageIndex, this.lastEnsuredPreviewZoom, { targetPagePixels })) {
+        setTimeout(() => this.#ensurePageLoaded(pageIndex, targetPdfRenderScale, { priority: false, targetPagePixels }), 0);
       }
     } catch (error) {
       page.loading = false;
-      console.error(`Failed to render PDF page ${page.source?.pageNum}:`, error);
-    }
-  }
-
-  async #ensureImagePageLoaded(pageIndex) {
-    const page = this.book.pages[pageIndex];
-    if (!page || page.source?.type !== "image" || page.loading || page.srcCanvas) return;
-
-    page.loading = true;
-    try {
-      const bitmap = await loadImageFile(page.source.file);
-      if (!this.#isWantedHighRes(pageIndex)) {
-        page.loading = false;
-        closeBitmap(bitmap);
-        return;
-      }
-      page.srcCanvas = bitmap;
-      page.aspectRatio = bitmap.width / bitmap.height;
-      page.loading = false;
-      this.onPageReady?.(pageIndex);
-      this.#resolvePageReadyWaiters(pageIndex);
-    } catch (error) {
-      page.loading = false;
-      console.error(`Failed to load image page ${page.source?.file?.name || pageIndex}:`, error);
+      const label = this.source?.getPageKind?.(pageIndex) || page.source?.type || "page";
+      console.error(`Failed to load high-res ${label} page ${pageIndex + 1}:`, error);
     }
   }
 
@@ -360,10 +389,6 @@ export class LazyPageLoader {
     page.interactivePreviewCanvas = null;
     page.interactivePreviewSourceCanvas = null;
     page.interactivePreviewMaxEdge = 0;
-    if (page.source?.type === "pdf") {
-      page.loadedPdfRenderScale = 0;
-      page.requestedPdfRenderScale = 0;
-      requestPdfDocumentCleanup(page.source.pdfDoc);
-    }
+    this.source?.cleanupPageHighRes?.(pageIndex, { page });
   }
 }

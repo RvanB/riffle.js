@@ -24,6 +24,19 @@ function easeTurnProgress(progress) {
   return 1 - Math.pow(1 - t, TURN_EASING_POWER);
 }
 
+function pageRectDrawnRect(pageRect) {
+  if (!pageRect) return null;
+  return {
+    x: Math.round(pageRect.x),
+    y: Math.round(pageRect.y),
+    w: Math.max(0, Math.round(pageRect.w)),
+    h: Math.max(0, Math.round(pageRect.h)),
+    fitScale: 1,
+    sw: 0,
+    sh: 0,
+  };
+}
+
 export class SpreadRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -228,7 +241,7 @@ export class SpreadRenderer {
               alignX: sideState.contentAlignX,
               alignY: sideState.contentAlignY,
             }
-          );
+          ) ?? pageRectDrawnRect(sideState.pageRect);
         }
       }
 

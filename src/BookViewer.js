@@ -10,6 +10,11 @@ const DEFAULT_LAYOUT = {
   ratio: 0, b: 1,
   mInner: 0, mTop: 0, mBottom: 0,
 };
+const TARGET_HIGH_RES_WINDOW_PAGES = 6;
+
+function isImagePage(page) {
+  return page?.metadata?.source?.type === "image";
+}
 
 /**
  * Options for {@link BookViewer}.
@@ -101,6 +106,7 @@ export class BookViewer {
     // Renderer + loaders.
     this.spreadRenderer = new rendererClass(spreadCanvas);
     this.lazyPageLoader = new LazyPageLoader(this.#loaderBook(), pageIndex => this.#onPageReady(pageIndex), {
+      source: this.source,
       maxHighResPages,
       pdfRenderScale,
       pdfRenderScaleHeadroom,
@@ -151,12 +157,13 @@ export class BookViewer {
     // (it writes srcCanvas/previewCanvas onto them). We give it the source's
     // own internal book if available, else fall back to a derived passthrough.
     this.lazyPageLoader.book = source.getInternalBook?.() ?? this.#loaderBook();
+    this.lazyPageLoader.source = source;
     this.currentSpread = 0;
     this.effectiveSpread = 0;
     this.lazyPageLoader.reset();
     if (this.book.pages.length) {
       this.lazyPageLoader.ensureSpreadLoaded(0, 1, { allowHighRes: false });
-      this.lazyPageLoader.warmAllPreviews();
+      this.lazyPageLoader.warmAllPreviews({ includeImages: true });
     }
     this.redraw();
     this.schedulePreviewRedraw();
@@ -276,6 +283,36 @@ export class BookViewer {
    */
   getSpreadGeometry() { return this.latestGeometry; }
 
+  ensureTargetHighResWindow(targetSpread = this.navigationController.getEffectiveSpread(), {
+    currentPriority = true,
+    adjacentPriority = false,
+  } = {}) {
+    const pageIndices = this.#centeredHighResWindowPageIndices(targetSpread);
+    if (!pageIndices.length) return pageIndices;
+
+    const currentPages = new Set(this.#spreadPageIndices(targetSpread));
+    const targetPagePixels = this.getHighResTargetPagePixels();
+    this.lazyPageLoader.retainHighResPages(pageIndices);
+
+    const requestOrder = [...pageIndices].sort((a, b) => {
+      const aCurrent = currentPages.has(a);
+      const bCurrent = currentPages.has(b);
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+      return a - b;
+    });
+
+    for (const pageIndex of requestOrder) {
+      const priority = currentPages.has(pageIndex) ? currentPriority : adjacentPriority;
+      if (this.lazyPageLoader.isPageHighResReady(pageIndex, this.contentZoom, { targetPagePixels })) {
+        this.lazyPageLoader.touchHighResPage(pageIndex);
+        continue;
+      }
+      this.lazyPageLoader.ensurePageHighRes(pageIndex, this.contentZoom, { priority, targetPagePixels });
+    }
+
+    return pageIndices;
+  }
+
   // ---- internal ----
 
   redraw() {
@@ -324,10 +361,10 @@ export class BookViewer {
     const targetSpread = this.navigationController.getEffectiveSpread();
     if (this.book.pages.length) {
       this.lazyPageLoader.ensureSpreadLoaded(targetSpread, this.contentZoom, {
-        allowHighRes: true,
+        allowHighRes: false,
         targetPagePixels: this.getHighResTargetPagePixels(),
       });
-      this.#prefetchAdjacentHighRes(targetSpread);
+      this.ensureTargetHighResWindow(targetSpread);
     }
     if (this.zoomController.applySafeRenderZoom()) this.redraw();
   }
@@ -342,18 +379,43 @@ export class BookViewer {
     };
   }
 
-  #prefetchAdjacentHighRes(targetSpread) {
-    const numSpreads = this.numSpreads;
-    const targetPagePixels = this.getHighResTargetPagePixels();
-    for (const adj of [targetSpread - 1, targetSpread + 1]) {
-      if (adj < 0 || adj >= numSpreads) continue;
-      const { left, right } = this.book.spreadPageEntries(adj);
-      for (const pageIndex of [left.pageIndex, right.pageIndex]) {
-        if (pageIndex < 0) continue;
-        if (this.lazyPageLoader.isPageHighResReady(pageIndex, this.contentZoom, { targetPagePixels })) continue;
-        this.lazyPageLoader.ensurePageHighRes(pageIndex, this.contentZoom, { priority: false, targetPagePixels });
+  #spreadPageIndices(spreadIndex) {
+    if (spreadIndex < 0 || spreadIndex >= this.numSpreads) return [];
+    const { left, right } = this.book.spreadPageEntries(spreadIndex);
+    return [left.pageIndex, right.pageIndex]
+      .filter(pageIndex => pageIndex >= 0 && pageIndex < this.book.pages.length);
+  }
+
+  #centeredHighResWindowPageIndices(targetSpread) {
+    const pageCount = this.book.pages.length;
+    const maxHighResPages = Math.max(0, Math.floor(Number(this.lazyPageLoader.maxHighResPages) || 0));
+    const desiredCount = Math.min(pageCount, TARGET_HIGH_RES_WINDOW_PAGES, maxHighResPages);
+    if (desiredCount <= 0) return [];
+
+    const currentPages = this.#spreadPageIndices(targetSpread);
+    if (!currentPages.length) return [];
+
+    const pageIndices = [...new Set(currentPages)].sort((a, b) => a - b).slice(0, desiredCount);
+    let start = pageIndices[0];
+    let end = pageIndices[pageIndices.length - 1];
+    let preferBefore = true;
+
+    while (pageIndices.length < desiredCount) {
+      const canAddBefore = start > 0;
+      const canAddAfter = end < pageCount - 1;
+      if (!canAddBefore && !canAddAfter) break;
+
+      if ((preferBefore && canAddBefore) || !canAddAfter) {
+        start -= 1;
+        pageIndices.unshift(start);
+      } else {
+        end += 1;
+        pageIndices.push(end);
       }
+      preferBefore = !preferBefore;
     }
+
+    return pageIndices;
   }
 
   // Snapshot a spread to a canvas for queued multi-spread animations.
@@ -377,7 +439,7 @@ export class BookViewer {
       // the fresh bitmap before the renderer reads through ViewerPage's
       // getter chain.
       this.emit("pageready", { pageIndex, animating: true });
-      if (viewerPage) this.spreadRenderer.refreshPageSource?.(viewerPage);
+      if (viewerPage && !isImagePage(viewerPage)) this.spreadRenderer.refreshPageSource?.(viewerPage);
       return;
     }
     // Emit first so host listeners can populate composed canvases / placed

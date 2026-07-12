@@ -102,13 +102,7 @@ export class ZoomController {
     const v = this.viewer;
     const targetSpread = v.navigationController.getEffectiveSpread();
     if (targetSpread < 0 || targetSpread >= v.book.numSpreads()) return;
-    const targetPagePixels = v.getHighResTargetPagePixels?.() ?? null;
-    const { left, right } = v.book.spreadPageEntries(targetSpread);
-    for (const pageIndex of [left.pageIndex, right.pageIndex]) {
-      if (pageIndex < 0) continue;
-      if (v.lazyPageLoader.isPageHighResReady(pageIndex, this.contentZoom, { targetPagePixels })) continue;
-      v.lazyPageLoader.ensurePageHighRes(pageIndex, this.contentZoom, { targetPagePixels });
-    }
+    v.ensureTargetHighResWindow?.(targetSpread);
   }
 
   adjustContentZoom(direction) {
