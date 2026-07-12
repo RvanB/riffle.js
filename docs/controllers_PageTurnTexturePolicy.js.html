@@ -3,7 +3,7 @@
 <head>
     
     <meta charset="utf-8">
-    <title>LazyPageLoader - Riffle docs</title>
+    <title>controllers/PageTurnTexturePolicy.js - Riffle docs</title>
     
     
     
@@ -40,158 +40,76 @@
 
 <div id="main">
     
-    <h1 class="page-title">LazyPageLoader</h1>
+    <h1 class="page-title">controllers/PageTurnTexturePolicy.js</h1>
     
 
     
 
 
 
-
-<section>
-
-<header>
     
-        <h2>
-        
-            LazyPageLoader
-        
-        </h2>
-        
-            <div class="class-description usertext"><p>Lazily loads PDF/image page bitmaps and tracks high-res memory via an LRU.</p>
-<p>Capacity is the maximum number of pages held at high resolution at once
-(default 8 ≈ 4 spreads). Requesting a page (<code>ensurePageHighRes</code> or via
-<code>ensureSpreadLoaded</code>) &quot;touches&quot; it, moving it to the most-recent slot;
-over-capacity entries at the oldest slot are evicted (bitmap closed,
-<code>page.srcCanvas</code> cleared). Previews are kept loaded indefinitely — they're
-cheap and the page strip depends on them.</p>
-<p>Eviction can be deferred via <code>setEvictionsDeferred(true)</code> to avoid closing
-a bitmap whose texture is still in use by an in-flight WebGPU animation.
-Call <code>flushEvictions()</code> (or <code>setEvictionsDeferred(false)</code>) once it's safe.</p></div>
-        
-    
-</header>
-
-<article>
-    
-        <div class="container-overview">
-        
-            
-
-    
-    <h2>Constructor</h2>
-    
-
-    <h4 class="name" id="LazyPageLoader"><span class="type-signature"></span>new LazyPageLoader<span class="signature">()</span><span class="type-signature"></span></h4>
-
-    
-
-
-
-
-<dl class="details">
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="loading_LazyPageLoader.js.html">loading/LazyPageLoader.js</a>, <a href="loading_LazyPageLoader.js.html#line33">line 33</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-        </div>
-    
-
-    
-
-    
-
-    
-        <h3 class="subsection-title">Classes</h3>
-
-        <dl>
-            <dt><a href="LazyPageLoader.html">LazyPageLoader</a></dt>
-            <dd></dd>
-        </dl>
-    
-    
-    
-
-     
-
-    
-
-    
-
-    
-
-    
-
-    
-</article>
-
-</section>
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const DEFAULT_HIGH_RES_DESTINATION_MAX_ZOOM = 2;
+
+/**
+ * Converts caller-provided zoom values into a positive zoom multiplier.
+ *
+ * Invalid, missing, and non-positive values fall back to 1 so texture-policy
+ * decisions stay conservative and predictable.
+ *
+ * @param {number} value Candidate zoom value.
+ * @returns {number} Positive zoom value.
+ */
+function normalizeZoom(value) {
+  const zoom = Number(value);
+  return Number.isFinite(zoom) &amp;&amp; zoom > 0 ? zoom : 1;
+}
+
+/**
+ * Chooses which page-turn surfaces can use page-strip preview textures.
+ *
+ * The turning leaf's front face is motion-blurred/curled and can stay cheap.
+ * The destination spread is more visible: one page is the underlay `toScene`,
+ * and the other may be the back face of the turning leaf from `fromScene`.
+ *
+ * @param {Object} options Turn context.
+ * @param {number} options.fromSpread Spread the turn starts from.
+ * @param {number} options.toSpread Spread being revealed by this animation step.
+ * @param {number} [options.targetSpread=options.toSpread] User-requested target spread.
+ * @param {number} [options.contentZoom=1] Current visual zoom.
+ * @param {number} [options.highResDestinationMaxZoom=2] Max zoom where destination textures use high-res.
+ * @returns {Object} Snapshot texture source flags.
+ */
+export function getPageTurnTexturePolicy({
+  fromSpread,
+  toSpread,
+  targetSpread = toSpread,
+  contentZoom = 1,
+  highResDestinationMaxZoom = DEFAULT_HIGH_RES_DESTINATION_MAX_ZOOM,
+} = {}) {
+  const zoom = normalizeZoom(contentZoom);
+  const usePreviewDestinationTextures = zoom > highResDestinationMaxZoom;
+
+  return {
+    fromSpread,
+    toSpread,
+    targetSpread,
+    contentZoom: zoom,
+    usePreviewDestinationTextures,
+    fromSnapshot: {
+      preferPreviewSources: true,
+      preferPreviewBackFaceSources: usePreviewDestinationTextures,
+    },
+    toSnapshot: {
+      preferPreviewSources: usePreviewDestinationTextures,
+      preferPreviewBackFaceSources: usePreviewDestinationTextures,
+    },
+  };
+}
+</code></pre>
+        </article>
+    </section>
 
 
 
