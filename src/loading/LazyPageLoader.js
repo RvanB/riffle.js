@@ -10,11 +10,6 @@ function closeBitmap(bitmap) {
   if (bitmap && typeof bitmap.close === "function") bitmap.close();
 }
 
-function debugPageLifecycle(event, details = {}) {
-  const time = globalThis.performance?.now ? globalThis.performance.now().toFixed(1) : "0.0";
-  console.log(`[riffle:page ${time}ms] ${event}`, details);
-}
-
 function normalizePreviewPriority(priority) {
   if (priority === true) return "visible";
   if (priority === false || priority == null) return "background";
@@ -311,13 +306,6 @@ export class LazyPageLoader {
         if (!previewBitmap) continue;
         page.previewCanvas = previewBitmap;
         if (!page.thumbnailSourceCanvas) page.thumbnailSourceCanvas = previewBitmap;
-        debugPageLifecycle("preview ready", {
-          pageIndex,
-          pageNumber: pageIndex + 1,
-          priority,
-          width: previewBitmap.width,
-          height: previewBitmap.height,
-        });
         this.onPageReady?.(pageIndex);
         this.#resolvePageReadyWaiters(pageIndex);
       } catch (error) {
@@ -347,29 +335,11 @@ export class LazyPageLoader {
       targetPdfRenderScale,
       renderConfig: this.#getRenderConfig({ priority: requestPriority }),
     }) ?? { ready: false, shouldLoad: false, request: null };
-    if (status.ready) {
-      debugPageLifecycle("high-res already ready", {
-        pageIndex,
-        pageNumber: pageIndex + 1,
-        priority: requestPriority,
-        targetPagePixels,
-        renderScale: page.loadedPdfRenderScale ?? null,
-        width: page.srcCanvas?.width ?? null,
-        height: page.srcCanvas?.height ?? null,
-      });
-      return;
-    }
+    if (status.ready) return;
     if (!status.shouldLoad) return;
 
     page.loading = true;
     try {
-      debugPageLifecycle("high-res request start", {
-        pageIndex,
-        pageNumber: pageIndex + 1,
-        priority: requestPriority,
-        targetPagePixels,
-        request: status.request,
-      });
       const bitmap = await this.source.getPageHighRes(pageIndex, {
         ...status.request,
         priority: requestPriority,
@@ -392,15 +362,6 @@ export class LazyPageLoader {
       page.aspectRatio = bitmap.width / bitmap.height;
       this.source.commitPageHighRes?.(pageIndex, { page, bitmap, request: status.request });
       page.loading = false;
-      debugPageLifecycle("high-res ready", {
-        pageIndex,
-        pageNumber: pageIndex + 1,
-        priority: requestPriority,
-        targetPagePixels,
-        request: status.request,
-        width: bitmap.width,
-        height: bitmap.height,
-      });
       this.onPageReady?.(pageIndex);
       // Close the previous bitmap AFTER onPageReady so that the renderer has
       // a chance to swing its scene-pinned source refs onto the new bitmap

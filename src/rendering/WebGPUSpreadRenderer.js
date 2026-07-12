@@ -11,6 +11,16 @@ const DEBUG_LOG_TURN_HINGE = false;
 const BASE_PAGE_SURFACE_SCALE = 2;
 const MAX_PAGE_SURFACE_EDGE = 8192;
 
+/**
+ * Picks the cheapest page bitmap that is suitable for animated front faces.
+ *
+ * Page turns use this for the visibly moving face of the leaf, where the
+ * curled/moving surface can tolerate page-strip quality and should avoid a
+ * large GPU texture upload.
+ *
+ * @param {Object|null} page Viewer page.
+ * @returns {HTMLCanvasElement|OffscreenCanvas|ImageBitmap|null} Preview-sized source, when available.
+ */
 function getPreviewSurfaceSource(page) {
   if (!page) return null;
   const thumbnailCanvas = page.thumbnailCanvas ?? null;
@@ -29,10 +39,31 @@ function getPreviewSurfaceSource(page) {
     ?? null;
 }
 
+/**
+ * Picks a raw preview bitmap for referenced pages.
+ *
+ * Referenced pages are composed by this renderer as show-through/back-face
+ * textures, so it needs an unplaced source instead of a pre-composed page.
+ *
+ * @param {Object|null} page Viewer page.
+ * @returns {HTMLCanvasElement|OffscreenCanvas|ImageBitmap|null} Raw preview source, when available.
+ */
 function getRawPreviewSurfaceSource(page) {
   return page?.rawPreviewCanvas ?? page?.thumbnailSourceCanvas ?? null;
 }
 
+/**
+ * Chooses the intermediate page-surface height for a texture source.
+ *
+ * Preview-backed animation surfaces stay capped at page-strip size, while
+ * display-backed/static surfaces use the actual rendered page height.
+ *
+ * @param {Object} scene Render scene.
+ * @param {Object} sideState Scene state for one page side.
+ * @param {HTMLCanvasElement|OffscreenCanvas|ImageBitmap|null} sourceCanvas Source bitmap.
+ * @param {boolean} [preferPreviewSources] Whether this surface should stay preview-sized.
+ * @returns {number} Intermediate surface height in pixels.
+ */
 function getPageSurfaceHeight(scene, sideState, sourceCanvas, preferPreviewSources = !!scene?.preferPreviewSources) {
   if (!preferPreviewSources) {
     return Math.max(1, Math.round(sideState.pageRect.h));
@@ -40,6 +71,19 @@ function getPageSurfaceHeight(scene, sideState, sourceCanvas, preferPreviewSourc
   return Math.max(1, Math.round(Math.min(sourceCanvas?.height || SHARED_PREVIEW_SIZE, SHARED_PREVIEW_SIZE)));
 }
 
+/**
+ * Scales page layout margins into a preview-sized coordinate system.
+ *
+ * `getPlacedPagePreview` expects page width, text-block margins, and page
+ * height to all share one scale. When we cap an animation texture to strip
+ * size, this keeps placement/proportions correct instead of mixing tiny
+ * height with full zoomed page widths.
+ *
+ * @param {Object} scene Render scene.
+ * @param {number} pageHeight Target intermediate surface height.
+ * @param {boolean} [preferPreviewSources] Whether this surface should use preview-sized margins.
+ * @returns {Object|null} Margins scaled for the intermediate surface.
+ */
 function getPageSurfaceMargins(scene, pageHeight, preferPreviewSources = !!scene?.preferPreviewSources) {
   const margins = scene?.margins ?? null;
   if (!margins || !preferPreviewSources) return margins;

@@ -12,11 +12,6 @@ const DEFAULT_LAYOUT = {
 };
 const TARGET_HIGH_RES_WINDOW_PAGES = 6;
 
-function debugPageLifecycle(event, details = {}) {
-  const time = globalThis.performance?.now ? globalThis.performance.now().toFixed(1) : "0.0";
-  console.log(`[riffle:page ${time}ms] ${event}`, details);
-}
-
 /**
  * Options for {@link BookViewer}.
  *
@@ -447,7 +442,19 @@ export class BookViewer {
     return pageIndices;
   }
 
-  // Snapshot a spread to a canvas for queued multi-spread animations.
+  /**
+   * Builds a renderer snapshot used as one side of a page-turn animation.
+   *
+   * On WebGPU this returns a sentinel canvas that maps back to a scene; the
+   * texture flags come from PageTurnTexturePolicy and decide whether the
+   * front face/back face should sample page-strip previews or display bitmaps.
+   *
+   * @param {number} spreadIndex Spread to snapshot.
+   * @param {Object} [options={}] Texture source options for the snapshot.
+   * @param {boolean} [options.preferPreviewSources=false] Use preview sources for the page front faces.
+   * @param {boolean} [options.preferPreviewBackFaceSources=options.preferPreviewSources] Use preview sources for turning-leaf back faces.
+   * @returns {HTMLCanvasElement|OffscreenCanvas} Snapshot key canvas.
+   */
   createSpreadSnapshot(spreadIndex, {
     preferPreviewSources = false,
     preferPreviewBackFaceSources = preferPreviewSources,
@@ -472,21 +479,6 @@ export class BookViewer {
 
   #onPageReady(pageIndex) {
     const viewerPage = this.book.pages[pageIndex] ?? null;
-    const { left, right } = this.book.spreadPageEntries(this.currentSpread);
-    const isOnCurrent = pageIndex === left.pageIndex || pageIndex === right.pageIndex;
-    debugPageLifecycle("pageready handled", {
-      pageIndex,
-      pageNumber: pageIndex + 1,
-      animating: this.spreadRenderer.isAnimating,
-      currentSpread: this.currentSpread,
-      effectiveSpread: this.effectiveSpread,
-      isOnCurrent,
-      hasSrcCanvas: !!viewerPage?.srcCanvas,
-      displayCanvasWidth: viewerPage?.displayCanvas?.width ?? null,
-      displayCanvasHeight: viewerPage?.displayCanvas?.height ?? null,
-      previewCanvasWidth: viewerPage?.previewCanvas?.width ?? null,
-      previewCanvasHeight: viewerPage?.previewCanvas?.height ?? null,
-    });
     if (this.spreadRenderer.isAnimating) {
       // Let host code (composition pipelines, thumbnail managers) react to
       // the fresh bitmap before the renderer reads through ViewerPage's
@@ -500,6 +492,8 @@ export class BookViewer {
     // Emit first so host listeners can populate composed canvases / placed
     // previews before the redraw samples ViewerPage.displayCanvas.
     this.emit("pageready", { pageIndex, animating: false });
+    const { left, right } = this.book.spreadPageEntries(this.currentSpread);
+    const isOnCurrent = pageIndex === left.pageIndex || pageIndex === right.pageIndex;
     if (isOnCurrent) {
       this.zoomController.applySafeRenderZoom();
       this.redraw();

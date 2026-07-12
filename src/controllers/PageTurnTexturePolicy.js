@@ -1,5 +1,14 @@
 const DEFAULT_HIGH_RES_DESTINATION_MAX_ZOOM = 2;
 
+/**
+ * Converts caller-provided zoom values into a positive zoom multiplier.
+ *
+ * Invalid, missing, and non-positive values fall back to 1 so texture-policy
+ * decisions stay conservative and predictable.
+ *
+ * @param {number} value Candidate zoom value.
+ * @returns {number} Positive zoom value.
+ */
 function normalizeZoom(value) {
   const zoom = Number(value);
   return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
