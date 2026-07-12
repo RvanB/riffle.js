@@ -141,6 +141,10 @@ export class NavigationController {
         toSpread: clampedTarget,
         targetSpread: options.targetSpread ?? clampedTarget,
         contentZoom: v.contentZoom,
+        // The settled spread stays put during a multi-spread jump (currentSpread
+        // only advances when the whole animation finishes), so the policy can
+        // tell the first turn from later steps by comparing against it.
+        currentSpread: v.currentSpread,
       });
       const fromCanvas = v.createSpreadSnapshot(fromSpread, texturePolicy.fromSnapshot);
       const toCanvas = v.createSpreadSnapshot(clampedTarget, texturePolicy.toSnapshot);

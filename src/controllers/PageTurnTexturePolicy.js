@@ -26,6 +26,7 @@ function normalizeZoom(value) {
  * @param {number} options.toSpread Spread being revealed by this animation step.
  * @param {number} [options.targetSpread=options.toSpread] User-requested target spread.
  * @param {number} [options.contentZoom=1] Current visual zoom.
+ * @param {number} [options.currentSpread=options.fromSpread] Spread the user is settled on at high-res. When the turn starts from here, the front face stays high-res.
  * @param {number} [options.highResDestinationMaxZoom=2] Max zoom where destination textures use high-res.
  * @returns {Object} Snapshot texture source flags.
  */
@@ -34,19 +35,32 @@ export function getPageTurnTexturePolicy({
   toSpread,
   targetSpread = toSpread,
   contentZoom = 1,
+  currentSpread = fromSpread,
   highResDestinationMaxZoom = DEFAULT_HIGH_RES_DESTINATION_MAX_ZOOM,
 } = {}) {
   const zoom = normalizeZoom(contentZoom);
   const usePreviewDestinationTextures = zoom > highResDestinationMaxZoom;
+
+  // The turning leaf's front face is normally motion-blurred/curled, so it can
+  // ride on cheap preview textures. But at the very start of a turn the leaf is
+  // still flat and fully visible: dropping to preview there would make the
+  // settled high-res spread the user was looking at visibly "pop" to low-res.
+  // A turn is a "start" when it turns from the spread the user is settled on
+  // (`currentSpread`); later steps of a multi-spread jump turn from spreads
+  // that were never settled, so they whip past and stay cheap.
+  const turnStart = fromSpread === currentSpread;
+  const usePreviewFrontFaceTextures = turnStart ? usePreviewDestinationTextures : true;
 
   return {
     fromSpread,
     toSpread,
     targetSpread,
     contentZoom: zoom,
+    turnStart,
     usePreviewDestinationTextures,
+    usePreviewFrontFaceTextures,
     fromSnapshot: {
-      preferPreviewSources: true,
+      preferPreviewSources: usePreviewFrontFaceTextures,
       preferPreviewBackFaceSources: usePreviewDestinationTextures,
     },
     toSnapshot: {

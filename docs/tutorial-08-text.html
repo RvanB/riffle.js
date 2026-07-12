@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>Tutorial: Select & OCR text - Riffle docs</title>
+    
+    
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">Tutorial: Select & OCR text</h1>
+    
+
+    <section>
+
+<header>
+    
+
+    <h2>Select & OCR text</h2>
+</header>
+
+<article>
+    <p>Riffle can overlay a <strong>selectable text layer</strong> on the rendered pages, so users
+can select and copy text and find it with the browser's search (Ctrl/⌘-F).
+There are two ways text gets there.</p>
+<h2>Selectable text from a PDF (automatic)</h2>
+<p>For PDFs that contain real text, the text layer is on by default — you don't
+have to do anything. Load a PDF and the words become selectable once each
+spread settles.</p>
+<p>To turn it off, pass <code>selectablePdfText: false</code> when creating the viewer:</p>
+<pre class="prettyprint source lang-js"><code>import { createViewer } from &quot;riffle&quot;;
+
+const viewer = createViewer({ selectablePdfText: false });
+</code></pre>
+<h2>Adding OCR text for scanned pages (<code>openHocr</code>)</h2>
+<p>Scanned documents have no embedded text — the page is just an image. To make
+them selectable, run OCR to produce <strong>hOCR</strong> (the standard HTML format emitted
+by Tesseract and most OCR engines) and attach it with
+<a href="RiffleViewer.html#openHocr"><code>RiffleViewer#openHocr</code></a>. This works whether the pages came from a PDF or
+from images:</p>
+<pre class="prettyprint source lang-js"><code>// Scanned images…
+await viewer.openImages(scanFiles);
+// …or an image-only PDF:
+// await viewer.openPdf(scannedPdfFile);
+
+// hocr can be a File/Blob, or a markup string.
+const { attached } = await viewer.openHocr(hocrFile);
+console.log(`attached OCR text to ${attached} pages`);
+</code></pre>
+<p><code>openHocr</code> parses the <code>.ocr_page</code> / <code>.ocrx_word</code> boxes, positions each word
+over the matching page, and refreshes the text layer. Where a page already has
+embedded text, attached OCR text takes precedence.</p>
+<h3>Aligning pages</h3>
+<p>hOCR pages are matched to document pages in order. If your hOCR only covers
+part of the document, use <code>pageOffset</code> to say which page the first hOCR page
+maps to:</p>
+<pre class="prettyprint source lang-js"><code>// OCR starts at the 3rd page (0-based offset 2).
+await viewer.openHocr(hocrText, { pageOffset: 2 });
+</code></pre>
+</article>
+
+</section>
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+<script src="scripts/collapse.js" defer></script>
+
+
+</body>
+</html>

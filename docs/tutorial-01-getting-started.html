@@ -3,7 +3,7 @@
 <head>
     
     <meta charset="utf-8">
-    <title>Home - Riffle docs</title>
+    <title>Tutorial: Getting started - Riffle docs</title>
     
     
     
@@ -40,92 +40,62 @@
 
 <div id="main">
     
-
+    <h1 class="page-title">Tutorial: Getting started</h1>
     
 
+    <section>
 
-
+<header>
     
 
+    <h2>Getting started</h2>
+</header>
 
-    <section class="package">
-        <h3> </h3>		
-    </section>
-
-
-
-
-
-
-
-
-
-    
-
-
-
-    <section class="readme usertext">
-        <article><h1>riffle.js</h1>
-<p>riffle.js is a browser book viewer for page bitmaps and PDFs. It renders a
-two-page spread with animated page turns, paper lighting, and translucency.</p>
-<p>Riffle is <strong>DOM-native and framework-agnostic</strong>: a viewer <em>is</em> a DOM element
-with a small set of methods. There is no controller object and no mounting
-step — you create an element, append it, and call methods on it. Nothing
-assumes React, Vue, Angular, or any framework.</p>
-<ul>
-<li><a href="https://rvanb.github.io/riffle.js/">Live demo</a></li>
-<li><a href="https://rvanb.github.io/riffle.js/docs/">Guides &amp; API reference</a></li>
-</ul>
-<p><img src="https://media.githubusercontent.com/media/RvanB/riffle.js/refs/heads/main/artifacts/riffle.png" alt="riffle.js screenshot"></p>
-<p><em>A screenshot of <a href="https://rvanbronkhorst.com/riffle.js/">the demo</a> — view its <a href="https://github.com/RvanB/riffle.js/blob/main/index.html">source</a>.</em></p>
+<article>
+    <p>Riffle is a <strong>DOM-native</strong> book/PDF viewer. Components are regular DOM
+elements with methods — there is no separate controller object and no mounting
+step. You create an element, append it to the page, and call methods on it.</p>
 <h2>The programming model</h2>
+<p>A viewer <em>is</em> a DOM element (a <code>&lt;canvas&gt;</code>) with the viewer API mixed in.</p>
 <pre class="prettyprint source lang-js"><code>import { createViewer } from &quot;riffle&quot;;
 
-const viewer = createViewer(); // returns a &lt;canvas> element
-container.append(viewer);      // append it like any other node
-await viewer.openPdf(file);    // call methods directly on it
+const viewer = createViewer();   // returns a &lt;canvas> element
+document.body.append(viewer);    // append it like any other node
+
+await viewer.openPdf(file);       // call methods directly on it
 </code></pre>
+<p>That's the whole mental model:</p>
 <ol>
-<li><strong>Create</strong> a viewer with <code>createViewer()</code>.</li>
+<li><strong>Create</strong> a viewer with <a href="global.html#createViewer"><code>createViewer</code></a>.</li>
 <li><strong>Append</strong> it wherever you want it in the DOM.</li>
-<li><strong>Call</strong> methods on it (<code>openPdf</code>, <code>navigateBy</code>, <code>on</code>, …).</li>
+<li><strong>Call</strong> methods on it (<code>openPdf</code>, <code>navigateTo</code>, <code>on</code>, …).</li>
 </ol>
-<p>Riffle never wraps your layout or injects styling — you decide where the viewer
+<p>Riffle never wraps your layout or injects styling. You decide where the viewer
 lives, how it sizes, and how it scrolls.</p>
-<h2>Quick start</h2>
-<p>A minimal, paste-and-run HTML file with a viewer and a thumbnail strip:</p>
+<h2>A minimal, paste-and-run page</h2>
 <pre class="prettyprint source lang-html"><code>&lt;!DOCTYPE html>
 &lt;html lang=&quot;en&quot;>
   &lt;head>
     &lt;meta charset=&quot;utf-8&quot; />
     &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot; />
     &lt;style>
-      /* The viewer sizes itself to its scrollable container. */
+      /* The viewer sizes itself to its container. */
       #viewport {
         width: 800px;
         height: 600px;
         overflow: auto;
-      }
-      /* Style the page strip through its stable class. */
-      .riffle-page-strip {
-        display: flex;
-        flex-direction: row;
-        gap: 4px;
-        overflow-x: auto;
       }
     &lt;/style>
   &lt;/head>
   &lt;body>
     &lt;input id=&quot;file-picker&quot; type=&quot;file&quot; accept=&quot;application/pdf&quot; />
     &lt;div id=&quot;viewport&quot;>&lt;/div>
-    &lt;div id=&quot;strip&quot;>&lt;/div>
 
     &lt;script type=&quot;module&quot;>
-      import { createViewer, createPageStrip } from &quot;https://cdn.jsdelivr.net/gh/RvanB/riffle.js@v0.2.0/dist/riffle.min.js&quot;;
+      import { createViewer } from &quot;https://cdn.jsdelivr.net/gh/RvanB/riffle.js@v0.2.0/dist/riffle.min.js&quot;;
 
       const viewer = createViewer();
       document.getElementById(&quot;viewport&quot;).append(viewer);
-      document.getElementById(&quot;strip&quot;).append(createPageStrip(viewer));
 
       document.getElementById(&quot;file-picker&quot;).addEventListener(&quot;change&quot;, (e) => {
         viewer.openPdf(e.target.files[0]);
@@ -134,35 +104,20 @@ lives, how it sizes, and how it scrolls.</p>
   &lt;/body>
 &lt;/html>
 </code></pre>
-<h2>Guides</h2>
-<p>Task-first walkthroughs live in the docs:</p>
+<h2>What counts as public API</h2>
+<p>Everything in the <a href="global.html#createViewer"><code>createViewer</code></a> and <a href="global.html#createPageStrip"><code>createPageStrip</code></a> reference,
+plus the paper/render options in <a href="global.html#RiffleOptions"><code>RiffleOptions</code></a>, is the stable public
+API. Undocumented properties and the generated DOM structure inside the viewer
+may change between releases — don't rely on them.</p>
+<h2>Next steps</h2>
 <ul>
-<li><strong>Getting started</strong> — the programming model and your first viewer.</li>
-<li><strong>Load a PDF</strong> — from a file, a URL, or bytes.</li>
-<li><strong>Navigate pages</strong> — turn pages and track position.</li>
-<li><strong>Add a thumbnail strip</strong> — <code>createPageStrip</code> and styling.</li>
-<li><strong>Control zoom</strong> — zoom methods and wheel/trackpad zoom.</li>
-<li><strong>Listen for events</strong> — <code>on</code> / <code>off</code>, event names, and payloads.</li>
-<li><strong>Select &amp; OCR text</strong> — selectable PDF text and attaching hOCR.</li>
+<li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a> — load from a file, a URL, or bytes.</li>
+<li><a href="tutorial-03-navigate-pages.html">Navigate pages</a> — turn pages programmatically.</li>
+<li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a> — add a thumbnail strip.</li>
 </ul>
-<h2>Public API</h2>
-<p>The public API is intentionally small:</p>
-<ul>
-<li><code>createViewer(options)</code> — create a viewer element.</li>
-<li><code>createPageStrip(viewer)</code> — create a thumbnail strip bound to a viewer.</li>
-<li>The viewer element's methods (<code>openPdf</code>, <code>navigateTo</code>, <code>navigateBy</code>,
-<code>adjustZoom</code>, <code>resetZoom</code>, <code>on</code>, <code>off</code>, …).</li>
-</ul>
-<p>Everything documented in the <a href="https://rvanb.github.io/riffle.js/docs/">guides &amp; API reference</a>
-is stable. Undocumented properties, internal modules under <code>src/</code>, and the DOM
-structure Riffle generates inside its elements may change between releases —
-please don't rely on them.</p></article>
-    </section>
+</article>
 
-
-
-
-
+</section>
 
     
     

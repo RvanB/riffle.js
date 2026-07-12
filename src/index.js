@@ -1,75 +1,16 @@
-// Public API
-export { Riffle } from "./Riffle.js";
-export { RifflePageStrip } from "./RifflePageStrip.js";
-export { BookViewer } from "./BookViewer.js";
+// Public API.
+//
+// Riffle is a DOM-native PDF/book viewer: a viewer *is* a DOM element with a
+// small set of methods. Everything documented here is the stable public API.
+// The modules under src/ (renderers, controllers, models, loaders, layout
+// math, primitives) are internal implementation details and may change
+// between releases — do not import them directly.
+export { createViewer } from "./createViewer.js";
+export { createPageStrip } from "./createPageStrip.js";
 
-// Sources
+// Page sources. Use these to display content other than a PDF file loaded via
+// `viewer.openPdf()` — e.g. an array of page images via ImagePageSource, or a
+// custom source subclassing PageSource.
 export { PageSource } from "./sources/PageSource.js";
 export { ImagePageSource } from "./sources/ImagePageSource.js";
 export { PdfPageSource } from "./sources/PdfPageSource.js";
-
-// Models
-export { ViewerBook } from "./model/ViewerBook.js";
-export { ViewerPage } from "./model/ViewerPage.js";
-
-// Renderers
-export { WebGPUSpreadRenderer } from "./rendering/WebGPUSpreadRenderer.js";
-export { SpreadRenderer } from "./rendering/SpreadRenderer.js";
-
-// Controllers (for callers who want a lower-level page strip with custom
-// callbacks than RifflePageStrip provides).
-export { PageStrip } from "./controllers/PageStrip.js";
-export { NavigationController } from "./controllers/NavigationController.js";
-export { ZoomController } from "./controllers/ZoomController.js";
-export { PdfTextLayerController } from "./controllers/PdfTextLayerController.js";
-
-// Layout helpers (consumers building their own composition pipelines may
-// need these to align with the renderer's page-rect math).
-export {
-  computeLayoutValues,
-  computeMargins,
-  computeScale,
-  computeContentScale,
-  getPageGeometry,
-} from "./rendering/layout.js";
-
-// Primitive draw helpers + crop-handle constants (for overlay UIs).
-export {
-  CROP_HANDLE_LEN,
-  CROP_HANDLE_PAD,
-  CROP_HANDLE_THICK,
-  drawCropHandles,
-  drawMarginOverlay,
-  drawVdG,
-  drawPageBorder,
-  getPageChromeColor,
-  snappedStrokeRect,
-  drawDirectionalLightFalloff,
-} from "./rendering/primitives.js";
-
-// PDF rasterization client (use this if you want raw PDF page bitmaps
-// without going through PdfPageSource — e.g. for export pipelines).
-export {
-  loadPdfDocument,
-  renderPdfPage,
-  getPdfPageAspectRatio,
-  getPdfPageInfo,
-  getPdfPageRasterSourceInfo,
-  getPdfPageTextContent,
-  getPdfPageLinkAnnotations,
-  requestPdfDocumentCleanup,
-} from "./loading/pdfLoader.js";
-export { loadHocr, parseHocr } from "./loading/hocr.js";
-
-// Image loading + downscaling helpers.
-export { loadImageFile, loadImagePreview } from "./loading/imageLoader.js";
-export { downscaleCanvasToMaxEdgeSync } from "./loading/downscaleCanvas.js";
-
-// Paper presets.
-export {
-  applyPaperPreset,
-  getPaperPresetOptions,
-  normalizePaperPreset,
-  getPaperPresetIdForColor,
-  DEFAULT_PAPER_PRESET_ID,
-} from "./model/paper.js";

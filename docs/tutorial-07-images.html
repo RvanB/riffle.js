@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>Tutorial: Display images - Riffle docs</title>
+    
+    
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">Tutorial: Display images</h1>
+    
+
+    <section>
+
+<header>
+    
+
+    <h2>Display images</h2>
+</header>
+
+<article>
+    <p>Riffle can display a set of images as a book — scanned pages, exported artwork,
+anything the browser can decode — with the same page-turn treatment as a PDF.</p>
+<h2>openImages</h2>
+<p>Pass a <code>FileList</code> or an array of <code>File</code>s to <a href="RiffleViewer.html"><code>RiffleViewer</code></a> <code>openImages</code>.
+It creates one page per image, fits the layout to the first image, and displays
+the first spread. Non-image files are ignored.</p>
+<pre class="prettyprint source lang-js"><code>import { createViewer } from &quot;riffle&quot;;
+
+const viewer = createViewer();
+document.getElementById(&quot;viewport&quot;).append(viewer);
+
+document.querySelector(&quot;input[type=file]&quot;).addEventListener(&quot;change&quot;, (e) => {
+  viewer.openImages(e.target.files);
+});
+</code></pre>
+<p>The file input should allow images and multiple selection:</p>
+<pre class="prettyprint source lang-html"><code>&lt;input type=&quot;file&quot; accept=&quot;image/*&quot; multiple />
+</code></pre>
+<h2>From URLs</h2>
+<p><code>openImages</code> takes files, so fetch remote images into <code>File</code>/<code>Blob</code> objects
+first:</p>
+<pre class="prettyprint source lang-js"><code>const urls = [&quot;/pages/01.jpg&quot;, &quot;/pages/02.jpg&quot;, &quot;/pages/03.jpg&quot;];
+const files = await Promise.all(
+  urls.map(async (url) => new File([await (await fetch(url)).blob()], url))
+);
+await viewer.openImages(files);
+</code></pre>
+<h2>Awaiting the load</h2>
+<p>Like <code>openPdf</code>, <code>openImages</code> returns a promise that resolves once the pages are
+on screen, so you can then read <a href="RiffleViewer.html"><code>RiffleViewer</code></a> <code>pageCount</code> or wire up
+navigation:</p>
+<pre class="prettyprint source lang-js"><code>await viewer.openImages(files);
+console.log(`${viewer.pageCount} pages`);
+</code></pre>
+<p>Everything in the other guides — <a href="tutorial-03-navigate-pages.html">Navigate pages</a>,
+<a href="tutorial-04-page-strip.html">Add a thumbnail strip</a>, <a href="tutorial-05-zoom.html">Control zoom</a> — works the same whether the
+pages came from a PDF or from images.</p>
+</article>
+
+</section>
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+<script src="scripts/collapse.js" defer></script>
+
+
+</body>
+</html>

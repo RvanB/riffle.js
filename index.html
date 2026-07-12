@@ -110,10 +110,10 @@
           align-items: center;
           padding: 0 8px;
       }
-      /* The page strip container the library creates. Allow programmatic
-         scrollLeft (PageStrip uses scrollTo to keep the in-spread thumb
-         centered) but hide the scrollbar so the overflow looks clean. */
-      #strip-container > div {
+      /* The page strip element the library creates. Style it via its stable
+         class. Allow programmatic scrollLeft (the strip keeps the in-spread
+         thumb centered) but hide the scrollbar so the overflow looks clean. */
+      .riffle-page-strip {
           flex: 1;
           align-self: stretch;
           overflow-x: auto;
@@ -122,7 +122,7 @@
           align-items: center;
           gap: 4px;
       }
-      #strip-container > div::-webkit-scrollbar { display: none; }  /* WebKit */
+      .riffle-page-strip::-webkit-scrollbar { display: none; }  /* WebKit */
       .strip-thumb {
           display: inline-flex;
           flex-direction: column;
@@ -179,49 +179,40 @@
       }
     </script>
     <script type="module">
-      import { ImagePageSource, Riffle, RifflePageStrip } from "riffle";
+      import { createViewer, createPageStrip } from "riffle";
 
       const viewport = document.getElementById("viewport");
       const stage = document.getElementById("stage");
       const stripContainer = document.getElementById("strip-container");
       const loadingStatus = document.getElementById("loading-status");
-      const viewer = Riffle({
+      const viewer = createViewer({
           viewport,
           paperPreset: "bright-white",
           renderScale: 1.5,
-          paperThickness: 0.7,
+          paperThickness: 1,
+          showThrough: 0, // Show-through is off by default; opt in to showcase it.
       });
       stage.appendChild(viewer);
-      stripContainer.appendChild(RifflePageStrip(viewer));
+      stripContainer.appendChild(createPageStrip(viewer));
 
       const pageInput = document.getElementById("page-input");
       const spreadReadout = document.getElementById("spread-readout");
 
-      const pageToSpread = (page) => viewer.spreadIndexForSourcePage(page - 1);
-      const spreadToPage = (spread) => viewer.primarySourcePageIndexForSpread(spread) + 1;
-      const pageLabel = (pageIndex) => {
-          if (pageIndex < 0 || pageIndex >= viewer.bookViewer.book.pages.length) return null;
-          const sourcePageIndex = viewer.pageIndexToSourcePageIndex(pageIndex);
-          if (sourcePageIndex >= 0) return String(sourcePageIndex + 1);
-          return null;
-      };
       const spreadLabel = (spread) => {
-          const entries = viewer.bookViewer.book.spreadPageEntries(spread);
-          const labels = [pageLabel(entries.left.pageIndex), pageLabel(entries.right.pageIndex)].filter(Boolean);
-          return labels.length ? labels.join("-") : "-";
+          const pages = viewer.pagesInSpread(spread);
+          return pages.length ? pages.join("-") : "—";
       };
 
       const refreshPageReadout = () => {
-          const total = viewer.sourcePageCount();
-          const hasVisiblePages = viewer.bookViewer.book.pages.length > 0;
-          const label = hasVisiblePages ? spreadLabel(viewer.effectiveSpread) : "—";
+          const total = viewer.pageCount;
           spreadReadout.textContent = total > 0
-              ? `pages ${label} of ${total}`
+              ? `pages ${spreadLabel(viewer.effectiveSpread)} of ${total}`
               : "pages —";
           pageInput.disabled = total <= 0;
           pageInput.max = String(Math.max(1, total));
           if (document.activeElement !== pageInput) {
-              pageInput.value = total > 0 ? String(spreadToPage(viewer.effectiveSpread)) : "";
+              const current = viewer.pagesInSpread(viewer.effectiveSpread)[0];
+              pageInput.value = total > 0 && current ? String(current) : "";
           }
       };
       viewer.on("sourcechange", refreshPageReadout);
@@ -232,245 +223,19 @@
       pageInput.addEventListener("change", () => {
           const n = Number(pageInput.value);
           if (!Number.isFinite(n) || n < 1) return;
-          const spread = pageToSpread(n);
-          if (spread < 0) return;
-          viewer.navigateTo(spread, viewer.sourcePageIndexToPageIndex(n - 1));
+          viewer.goToPage(n);
       });
       pageInput.addEventListener("keydown", (event) => {
           if (event.key === "Enter") pageInput.blur();
       });
 
-      const readAscii = (bytes, offset, length) =>
-          String.fromCharCode(...bytes.subarray(offset, offset + length));
-
-      const applyOrientation = (width, height, orientation = 1) =>
-          orientation >= 5 && orientation <= 8
-              ? { width: height, height: width }
-              : { width, height };
-
-      const parseExifOrientation = (bytes, offset, length) => {
-          if (length < 14 || readAscii(bytes, offset, 4) !== "Exif") return 1;
-          const tiff = offset + 6;
-          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-          const byteOrder = readAscii(bytes, tiff, 2);
-          const littleEndian = byteOrder === "II";
-          if (!littleEndian && byteOrder !== "MM") return 1;
-          if (view.getUint16(tiff + 2, littleEndian) !== 42) return 1;
-          const ifdOffset = view.getUint32(tiff + 4, littleEndian);
-          const ifd = tiff + ifdOffset;
-          if (ifd + 2 > offset + length) return 1;
-          const count = view.getUint16(ifd, littleEndian);
-          for (let i = 0; i < count; i += 1) {
-              const entry = ifd + 2 + i * 12;
-              if (entry + 12 > offset + length) break;
-              if (view.getUint16(entry, littleEndian) !== 274) continue;
-              return view.getUint16(entry + 8, littleEndian) || 1;
-          }
-          return 1;
-      };
-
-      const parseTiffDimensions = (bytes) => {
-          if (bytes.length < 8) return null;
-          const byteOrder = readAscii(bytes, 0, 2);
-          const littleEndian = byteOrder === "II";
-          if (!littleEndian && byteOrder !== "MM") return null;
-          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-          if (view.getUint16(2, littleEndian) !== 42) return null;
-          const ifd = view.getUint32(4, littleEndian);
-          if (ifd + 2 > bytes.length) return null;
-          const count = view.getUint16(ifd, littleEndian);
-          let width = 0;
-          let height = 0;
-          let orientation = 1;
-          for (let i = 0; i < count; i += 1) {
-              const entry = ifd + 2 + i * 12;
-              if (entry + 12 > bytes.length) break;
-              const tag = view.getUint16(entry, littleEndian);
-              const type = view.getUint16(entry + 2, littleEndian);
-              const value = type === 3
-                  ? view.getUint16(entry + 8, littleEndian)
-                  : view.getUint32(entry + 8, littleEndian);
-              if (tag === 256) width = value;
-              else if (tag === 257) height = value;
-              else if (tag === 274) orientation = value || 1;
-          }
-          return width > 0 && height > 0 ? applyOrientation(width, height, orientation) : null;
-      };
-
-      const parseWebpDimensions = (bytes) => {
-          if (bytes.length < 30 || readAscii(bytes, 0, 4) !== "RIFF" || readAscii(bytes, 8, 4) !== "WEBP") return null;
-          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-          const chunk = readAscii(bytes, 12, 4);
-          if (chunk === "VP8X") {
-              const width = 1 + bytes[24] + (bytes[25] << 8) + (bytes[26] << 16);
-              const height = 1 + bytes[27] + (bytes[28] << 8) + (bytes[29] << 16);
-              return { width, height };
-          }
-          if (chunk === "VP8 " && bytes.length >= 30) {
-              const width = view.getUint16(26, true) & 0x3fff;
-              const height = view.getUint16(28, true) & 0x3fff;
-              return width > 0 && height > 0 ? { width, height } : null;
-          }
-          if (chunk === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
-              const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
-              return {
-                  width: (bits & 0x3fff) + 1,
-                  height: ((bits >> 14) & 0x3fff) + 1,
-              };
-          }
-          return null;
-      };
-
-      const parseImageDimensions = (bytes) => {
-          if (bytes.length < 16) return null;
-          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-          if (bytes[0] === 0x89 && readAscii(bytes, 1, 3) === "PNG") {
-              return { width: view.getUint32(16, false), height: view.getUint32(20, false) };
-          }
-          if (readAscii(bytes, 0, 3) === "GIF") {
-              return { width: view.getUint16(6, true), height: view.getUint16(8, true) };
-          }
-          if (readAscii(bytes, 0, 2) === "BM" && bytes.length >= 26) {
-              const width = Math.abs(view.getInt32(18, true));
-              const height = Math.abs(view.getInt32(22, true));
-              return width > 0 && height > 0 ? { width, height } : null;
-          }
-          const webp = parseWebpDimensions(bytes);
-          if (webp) return webp;
-          const tiff = parseTiffDimensions(bytes);
-          if (tiff) return tiff;
-          if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-              let offset = 2;
-              let orientation = 1;
-              while (offset + 4 < bytes.length) {
-                  while (bytes[offset] === 0xff) offset += 1;
-                  const marker = bytes[offset];
-                  offset += 1;
-                  if (marker === 0xd9 || marker === 0xda) break;
-                  const length = view.getUint16(offset, false);
-                  if (length < 2 || offset + length > bytes.length) break;
-                  const segment = offset + 2;
-                  if (marker === 0xe1) orientation = parseExifOrientation(bytes, segment, length - 2);
-                  if (
-                      marker === 0xc0 || marker === 0xc1 || marker === 0xc2 || marker === 0xc3 ||
-                      marker === 0xc5 || marker === 0xc6 || marker === 0xc7 ||
-                      marker === 0xc9 || marker === 0xca || marker === 0xcb ||
-                      marker === 0xcd || marker === 0xce || marker === 0xcf
-                  ) {
-                      const height = view.getUint16(segment + 1, false);
-                      const width = view.getUint16(segment + 3, false);
-                      return applyOrientation(width, height, orientation);
-                  }
-                  offset += length;
-              }
-          }
-          return null;
-      };
-
-      const loadImageDimensionsByDecode = (file) => new Promise(resolve => {
-          const url = URL.createObjectURL(file);
-          const image = new Image();
-          const done = (dimensions) => {
-              URL.revokeObjectURL(url);
-              resolve(dimensions);
-          };
-          image.onload = () => done({
-              width: Math.max(1, image.naturalWidth || image.width || 1),
-              height: Math.max(1, image.naturalHeight || image.height || 1),
-          });
-          image.onerror = () => done({ width: 1, height: 1 });
-          image.src = url;
-      });
-
-      const loadImageDimensions = async (file) => {
-          const bytes = new Uint8Array(await file.slice(0, 256 * 1024).arrayBuffer());
-          const dimensions = parseImageDimensions(bytes);
-          if (dimensions?.width > 0 && dimensions?.height > 0) return dimensions;
-          console.debug("[Riffle] Could not read image dimensions from headers; decoding image for dimensions", {
-              name: file.name,
-          });
-          return loadImageDimensionsByDecode(file);
-      };
-
-      const makeImagePage = (file, { width, height }) => ({
-          source: { type: "image", file },
-          aspectRatio: width / height,
-          srcCanvas: null,
-          previewCanvas: null,
-          thumbnailSourceCanvas: null,
-          displayCanvasOverride: null,
-          placedPreviewCanvas: null,
-          loading: false,
-          loadedImageMaxEdge: 0,
-          requestedImageMaxEdge: 0,
-          crop: { top: 0, left: 0, right: 0, bottom: 0 },
-          cover: true,
-          spread: false,
-          fitAxis: "inside",
-          contentAlignX: null,
-          contentAlignY: "center",
-          get displayCanvas() { return this.displayCanvasOverride || this.srcCanvas || this.previewCanvas || null; },
-          get thumbnailCanvas() { return this.placedPreviewCanvas || this.thumbnailSourceCanvas || this.previewCanvas || this.srcCanvas || null; },
-          getCropFor() { return { ...this.crop }; },
-          setCropFor(_canvas, crop) { this.crop = { ...this.crop, ...crop }; },
-      });
-
-      const makeImageBook = (pages) => ({
-          get pages() { return pages; },
-          numSpreads() { return Math.max(1, Math.ceil((pages.length + 1) / 2)); },
-          spreadPages(spreadIndex) {
-              const leftIndex = spreadIndex * 2 - 1;
-              const rightIndex = spreadIndex * 2;
-              return [
-                  leftIndex >= 0 ? pages[leftIndex] ?? null : null,
-                  pages[rightIndex] ?? null,
-              ];
-          },
-          spreadPageEntries(spreadIndex) {
-              const leftIndex = spreadIndex * 2 - 1;
-              const rightIndex = spreadIndex * 2;
-              return {
-                  left: {
-                      page: leftIndex >= 0 ? pages[leftIndex] ?? null : null,
-                      pageIndex: leftIndex,
-                      showThroughPage: leftIndex - 1 >= 0 ? pages[leftIndex - 1] ?? null : null,
-                  },
-                  right: {
-                      page: pages[rightIndex] ?? null,
-                      pageIndex: rightIndex,
-                      showThroughPage: pages[rightIndex + 1] ?? null,
-                  },
-              };
-          },
-      });
-
-      const isImageFile = (file) =>
-          file.type.startsWith("image/") ||
-          /\.(avif|bmp|gif|jpe?g|png|svg|tiff?|webp)$/i.test(file.name);
-
       const openImages = async (files) => {
-          const imageFiles = [...files].filter(isImageFile);
-          if (!imageFiles.length) return;
+          const list = [...files];
+          if (!list.length) return;
           loadingStatus.hidden = false;
-          loadingStatus.textContent = imageFiles.length === 1 ? "Loading image..." : "Loading images...";
+          loadingStatus.textContent = list.length === 1 ? "Loading image..." : "Loading images...";
           try {
-              const dimensions = await Promise.all(imageFiles.map(loadImageDimensions));
-              const pages = imageFiles.map((file, index) => makeImagePage(file, dimensions[index]));
-              const book = makeImageBook(pages);
-              const source = new ImagePageSource({
-                  getPageCount: () => pages.length,
-                  getPageMetadata: (index) => {
-                      const page = pages[index] ?? null;
-                      return page ? { aspectRatio: page.aspectRatio, passthrough: page } : null;
-                  },
-                  internalBook: book,
-              });
-              viewer.setSource(source);
-              const firstAspect = pages[0]?.aspectRatio ?? 0.647;
-              viewer.setLayout({
-                  pw: viewer.bookViewer.layout.ph * firstAspect,
-                  ratio: firstAspect * 0.999,
-              });
+              await viewer.openImages(list);
               refreshPageReadout();
               loadingStatus.hidden = true;
           } catch (error) {

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>Tutorial: Add a thumbnail strip - Riffle docs</title>
+    
+    
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">Tutorial: Add a thumbnail strip</h1>
+    
+
+    <section>
+
+<header>
+    
+
+    <h2>Add a thumbnail strip</h2>
+</header>
+
+<article>
+    <p>A <strong>page strip</strong> is a scrollable row of page thumbnails, kept in sync with the
+viewer. Clicking a thumbnail navigates to that page. It's a separate component,
+so you can place it wherever your layout needs it — above, below, or beside the
+viewer.</p>
+<h2>Create and append</h2>
+<p><a href="global.html#createPageStrip"><code>createPageStrip</code></a> takes a viewer and returns a <code>&lt;div&gt;</code> with the class
+<code>riffle-page-strip</code>:</p>
+<pre class="prettyprint source lang-js"><code>import { createViewer, createPageStrip } from &quot;riffle&quot;;
+
+const viewer = createViewer();
+document.getElementById(&quot;viewport&quot;).append(viewer);
+
+const strip = createPageStrip(viewer);
+document.getElementById(&quot;strip&quot;).append(strip);
+</code></pre>
+<p>The strip populates itself with one thumbnail per page as the document loads,
+highlights the current spread, and scrolls to keep it centered. You don't have
+to wire any of that up.</p>
+<h2>Styling</h2>
+<p>Riffle imposes no layout — style the strip yourself by targeting its stable
+class. To lay the thumbnails out in a horizontal, scrollable row:</p>
+<pre class="prettyprint source lang-css"><code>.riffle-page-strip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+</code></pre>
+<p>Target the component's own class rather than the DOM Riffle generates inside
+it — the internal structure is not part of the public API and may change.</p>
+<h2>Multiple strips</h2>
+<p>You can bind more than one strip to the same viewer (for example a compact one
+in a toolbar and a larger one in a sidebar). Each stays in sync independently:</p>
+<pre class="prettyprint source lang-js"><code>toolbar.append(createPageStrip(viewer));
+sidebar.append(createPageStrip(viewer));
+</code></pre>
+</article>
+
+</section>
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+<script src="scripts/collapse.js" defer></script>
+
+
+</body>
+</html>

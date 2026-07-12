@@ -1162,7 +1162,8 @@ export class WebGPUSpreadRenderer {
                   hiddenTexel.a
                 );
                 let hiddenLin = srgbToLinear(hiddenTransmission);
-                let transmittance = 1.0 - paperThickness;
+                let showThrough = clamp(uniforms.effectD.z, 0.0, 1.0);
+                let transmittance = (1.0 - paperThickness) * showThrough;
                 let paperTexel = textureSample(paperTex, texSampler, input.pageUv).rgb;
                 let paperLuma = dot(paperTexel, vec3<f32>(0.2126, 0.7152, 0.0722));
                 let paperCentered = clamp((paperLuma - 0.965) * 3.4, -0.1, 0.075);
@@ -1638,6 +1639,7 @@ export class WebGPUSpreadRenderer {
     const hasFacingPage = !!scene.sideStates[oppositeSide]?.page && !sideState.isEndPage;
     uniformData.set([hasFacingPage ? 1 : 0, hingeOnRight ? 1 : 0, normalSign, flipX ? 1 : 0], 24);
     const paperThickness = Math.max(0, Math.min(1, scene.display.paperThickness ?? 0.5));
+    const showThrough = Math.max(0, Math.min(1, scene.display.showThrough ?? 0));
     const paperTextureStrength = Math.max(0, Math.min(1, scene.display.paperTextureStrength ?? 0.2));
     uniformData.set([occluders.length, ignoreOccluderId, paperThickness, paperTextureStrength], 28);
     uniformData.set(paperColor, 32);
@@ -1654,7 +1656,7 @@ export class WebGPUSpreadRenderer {
       (gpuEffects.levels?.white ?? 255) / 255,
       gpuEffects.bwEnabled ? 1 : 0,
     ], 44);
-    uniformData.set([getBlendModeIndex(scene.display.contentBlendMode), hasLoadedContent ? 0 : 1, 0, 0], 48);
+    uniformData.set([getBlendModeIndex(scene.display.contentBlendMode), hasLoadedContent ? 0 : 1, showThrough, 0], 48);
     uniformData.set(lightShadowColor, 52);
     uniformData.set(lightHighlightColor, 56);
     uniformData.set(shadowTintColor, 60);

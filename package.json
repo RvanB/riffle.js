@@ -1,6 +1,6 @@
 {
   "name": "riffle",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Page-turning book viewer with show-through translucency.",
   "type": "module",
   "main": "dist/riffle.min.js",

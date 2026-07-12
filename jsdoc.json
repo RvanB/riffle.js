@@ -1,13 +1,17 @@
 {
   "source": {
-    "include": ["src", "README.md"],
-    "includePattern": "\\.js$",
-    "exclude": ["src/loading/pdfWorker.js"]
+    "include": [
+      "src/createViewer.js",
+      "src/createPageStrip.js",
+      "README.md"
+    ],
+    "includePattern": "\\.js$"
   },
   "opts": {
     "destination": "docs",
     "encoding": "utf8",
     "readme": "README.md",
+    "tutorials": "tutorials",
     "recurse": true,
     "template": "node_modules/docdash"
   },

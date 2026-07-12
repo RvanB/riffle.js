@@ -209,4 +209,28 @@ export class ImagePageSource extends PageSource {
     page.loadedImageMaxEdge = 0;
     page.requestedImageMaxEdge = 0;
   }
+
+  /**
+   * Attaches external (e.g. OCR / hOCR) text content to pages so the viewer can
+   * overlay a selectable text layer. Each entry is stored on the matching page
+   * record as `ocrTextContent`; the renderer reads it directly, so this makes
+   * image pages searchable and selectable just like PDF text.
+   *
+   * @param {Object[]} pages Text-content pages (as produced by `loadHocr`).
+   * @param {Object} [options={}] Attachment options.
+   * @param {number} [options.pageOffset=0] Index of the first page these map to.
+   * @returns {number} Number of pages updated.
+   */
+  attachTextContent(pages, { pageOffset = 0 } = {}) {
+    if (!Array.isArray(pages)) throw new TypeError("attachTextContent: pages must be an array");
+    let count = 0;
+    for (let i = 0; i < pages.length; i += 1) {
+      const page = this.getPageRecord(pageOffset + i);
+      if (!page) continue;
+      page.ocrTextContent = pages[i] || null;
+      this.notifyPageChanged(pageOffset + i);
+      count += 1;
+    }
+    return count;
+  }
 }

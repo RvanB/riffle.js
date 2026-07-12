@@ -1,0 +1,10 @@
+{
+  "01-getting-started": { "title": "Getting started" },
+  "02-load-a-pdf": { "title": "Load a PDF" },
+  "03-navigate-pages": { "title": "Navigate pages" },
+  "04-page-strip": { "title": "Add a thumbnail strip" },
+  "05-zoom": { "title": "Control zoom" },
+  "06-events": { "title": "Listen for events" },
+  "07-images": { "title": "Display images" },
+  "08-text": { "title": "Select & OCR text" }
+}

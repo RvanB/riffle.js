@@ -25,6 +25,7 @@ const TARGET_HIGH_RES_WINDOW_PAGES = 6;
  * @property {string} [paperPreset="natural"] Paper preset id.
  * @property {string} [contentBlendMode="multiply"] Blend mode for page content.
  * @property {number} [paperThickness=0.5] Paper edge and turn-lighting strength from 0 to 1.
+ * @property {number} [showThrough=0] Strength of the show-through translucency (adjacent page bleeding through) from 0 (off) to 1.
  * @property {number} [paperTextureStrength=0.18] Paper texture/normal strength from 0 to 1.
  * @property {boolean} [showPageBorder=true] Whether to render the page edge treatment.
  * @property {number} [maxHighResPages=8] High-resolution page bitmap LRU capacity.
@@ -55,6 +56,7 @@ export class BookViewer {
     paperPreset = DEFAULT_PAPER_PRESET_ID,
     contentBlendMode = "multiply",
     paperThickness = 0.5,
+    showThrough = 0,
     paperTextureStrength = 0.18,
     showPageBorder = true,
     maxHighResPages = 8,
@@ -80,6 +82,7 @@ export class BookViewer {
     this.display = applyPaperPreset({
       contentBlendMode,
       paperThickness,
+      showThrough,
       paperTextureStrength,
       ...display,
     }, paperPreset);

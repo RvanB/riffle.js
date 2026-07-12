@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>Tutorial: Control zoom - Riffle docs</title>
+    
+    
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">Tutorial: Control zoom</h1>
+    
+
+    <section>
+
+<header>
+    
+
+    <h2>Control zoom</h2>
+</header>
+
+<article>
+    <p>The viewer fits the spread to its container by default. You can zoom in and out
+through methods on the <a href="RiffleViewer.html"><code>RiffleViewer</code></a> element.</p>
+<h2>Zoom controls</h2>
+<p><code>adjustZoom(delta)</code> multiplies the current zoom by <code>delta</code>; <code>resetZoom()</code>
+restores the fit-to-viewport zoom:</p>
+<pre class="prettyprint source lang-js"><code>zoomInButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(1.25));
+zoomOutButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(0.8));
+resetButton.addEventListener(&quot;click&quot;, () => viewer.resetZoom());
+</code></pre>
+<h2>Wheel / trackpad zoom</h2>
+<p>Zoom on ctrl/⌘ + wheel, the convention most PDF readers use:</p>
+<pre class="prettyprint source lang-js"><code>viewer.addEventListener(&quot;wheel&quot;, (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  viewer.adjustZoom(e.deltaY &lt; 0 ? 1.1 : 0.9);
+}, { passive: false });
+</code></pre>
+<h2>Reading the zoom</h2>
+<p><code>viewer.contentZoom</code> reports the current visual zoom factor (<code>1</code> = fit to
+viewport). To keep a zoom readout in sync as it changes, listen for the
+<code>zoomchange</code> event — see <a href="tutorial-06-events.html">Listen for events</a>.</p>
+<h2>The viewport element</h2>
+<p>Zoom is measured against a <strong>viewport</strong> element — the scrollable container the
+spread is fit into. By default that's the viewer's parent. Pass an explicit
+element via the <code>viewport</code> option to <a href="global.html#createViewer"><code>createViewer</code></a>, or call
+<code>viewer.setViewport(el)</code> later, when the viewer isn't a direct child of the
+element you scroll.</p>
+</article>
+
+</section>
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+<script src="scripts/collapse.js" defer></script>
+
+
+</body>
+</html>
