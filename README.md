@@ -1,7 +1,8 @@
 # riffle.js
 
 riffle.js is a browser book viewer for page bitmaps and PDFs. It renders a
-two-page spread with animated page turns, paper lighting, and translucency.
+two-page spread with animated page turns, paper lighting, and optional
+show-through translucency.
 
 Riffle is **DOM-native and framework-agnostic**: a viewer *is* a DOM element
 with a small set of methods. There is no controller object and no mounting
@@ -34,7 +35,8 @@ lives, how it sizes, and how it scrolls.
 
 ## Quick start
 
-A minimal, paste-and-run HTML file with a viewer and a thumbnail strip:
+A minimal, paste-and-run HTML file with a viewer and a thumbnail strip that
+loads a PDF or a set of images and turns pages with the arrow keys:
 
 ```html
 <!DOCTYPE html>
@@ -52,14 +54,14 @@ A minimal, paste-and-run HTML file with a viewer and a thumbnail strip:
       /* Style the page strip through its stable class. */
       .riffle-page-strip {
         display: flex;
-        flex-direction: row;
         gap: 4px;
         overflow-x: auto;
       }
     </style>
   </head>
   <body>
-    <input id="file-picker" type="file" accept="application/pdf" />
+    <input id="pdf" type="file" accept="application/pdf" />
+    <input id="images" type="file" accept="image/*" multiple />
     <div id="viewport"></div>
     <div id="strip"></div>
 
@@ -70,8 +72,19 @@ A minimal, paste-and-run HTML file with a viewer and a thumbnail strip:
       document.getElementById("viewport").append(viewer);
       document.getElementById("strip").append(createPageStrip(viewer));
 
-      document.getElementById("file-picker").addEventListener("change", (e) => {
+      // Load a PDF…
+      document.getElementById("pdf").addEventListener("change", (e) => {
         viewer.openPdf(e.target.files[0]);
+      });
+      // …or a set of images, one page each.
+      document.getElementById("images").addEventListener("change", (e) => {
+        viewer.openImages(e.target.files);
+      });
+
+      // Turn pages with the arrow keys.
+      addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight") viewer.navigateBy(+1);
+        if (e.key === "ArrowLeft") viewer.navigateBy(-1);
       });
     </script>
   </body>
@@ -84,6 +97,7 @@ Task-first walkthroughs live in the docs:
 
 - **Getting started** — the programming model and your first viewer.
 - **Load a PDF** — from a file, a URL, or bytes.
+- **Display images** — one page per image with `openImages`.
 - **Navigate pages** — turn pages and track position.
 - **Add a thumbnail strip** — `createPageStrip` and styling.
 - **Control zoom** — zoom methods and wheel/trackpad zoom.
@@ -96,8 +110,8 @@ The public API is intentionally small:
 
 - `createViewer(options)` — create a viewer element.
 - `createPageStrip(viewer)` — create a thumbnail strip bound to a viewer.
-- The viewer element's methods (`openPdf`, `navigateTo`, `navigateBy`,
-  `adjustZoom`, `resetZoom`, `on`, `off`, …).
+- The viewer element's methods (`openPdf`, `openImages`, `navigateBy`,
+  `goToPage`, `adjustZoom`, `resetZoom`, `on`, `off`, …).
 
 Everything documented in the [guides & API reference](https://rvanb.github.io/riffle.js/docs/)
 is stable. Undocumented properties, internal modules under `src/`, and the DOM
