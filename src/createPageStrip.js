@@ -26,10 +26,8 @@ export function createPageStrip(viewer) {
 
   const refresh = () => {
     pageStrip.update(bookViewer.book, {
-      appMode: "content",
       effectiveSpread: bookViewer.navigationController.getEffectiveSpread(),
-      editingPageIdx: -1,
-      selectedPageIdxs: new Set(),
+      showSelection: false,
     });
   };
 

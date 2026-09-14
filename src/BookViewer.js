@@ -26,7 +26,6 @@ const TARGET_HIGH_RES_WINDOW_PAGES = 6;
  * @property {string} [contentBlendMode="multiply"] Blend mode for page content.
  * @property {number} [paperThickness=0.5] Paper edge and turn-lighting strength from 0 to 1.
  * @property {number} [showThrough=0] Strength of the show-through translucency (adjacent page bleeding through) from 0 (off) to 1.
- * @property {number} [paperTextureStrength=0.18] Paper texture/normal strength from 0 to 1.
  * @property {boolean} [showPageBorder=true] Whether to render the page edge treatment.
  * @property {number} [maxHighResPages=8] High-resolution page bitmap LRU capacity.
  * @property {number} [pdfRenderScale=1.5] Baseline PDF rasterization scale before DPR/zoom.
@@ -57,7 +56,6 @@ export class BookViewer {
     contentBlendMode = "multiply",
     paperThickness = 0.5,
     showThrough = 0,
-    paperTextureStrength = 0.18,
     showPageBorder = true,
     maxHighResPages = 8,
     pdfRenderScale = 1.5,
@@ -83,7 +81,6 @@ export class BookViewer {
       contentBlendMode,
       paperThickness,
       showThrough,
-      paperTextureStrength,
       ...display,
     }, paperPreset);
     this.showPageBorder = showPageBorder;

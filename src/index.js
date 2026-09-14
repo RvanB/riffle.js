@@ -14,3 +14,8 @@ export { createPageStrip } from "./createPageStrip.js";
 export { PageSource } from "./sources/PageSource.js";
 export { ImagePageSource } from "./sources/ImagePageSource.js";
 export { PdfPageSource } from "./sources/PdfPageSource.js";
+
+// Building blocks for hosts that keep their own page model rather than handing
+// Riffle a source and letting it drive.
+export { PageStrip } from "./controllers/PageStrip.js";
+export { PdfDocument } from "./PdfDocument.js";

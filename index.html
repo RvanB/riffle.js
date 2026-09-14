@@ -101,6 +101,22 @@
           pointer-events: none;
       }
       #loading-status[hidden] { display: none; }
+      #drop-overlay {
+          position: fixed;
+          inset: 12px;
+          z-index: 10;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px dashed #6af;
+          border-radius: 10px;
+          background: rgba(20, 30, 42, 0.9);
+          color: #d9ecff;
+          font-size: 18px;
+          font-weight: 600;
+          pointer-events: none;
+      }
+      #drop-overlay[hidden] { display: none; }
       #strip-container {
           flex: 0 0 64px;
           background: #161616;
@@ -170,6 +186,7 @@
       <div id="stage"></div>
       <div id="loading-status" role="status" hidden>Loading PDF...</div>
     </div>
+    <div id="drop-overlay" aria-hidden="true" hidden>Drop a PDF or images to open</div>
     <div id="strip-container"></div>
     <script type="importmap">
       {
@@ -185,6 +202,7 @@
       const stage = document.getElementById("stage");
       const stripContainer = document.getElementById("strip-container");
       const loadingStatus = document.getElementById("loading-status");
+      const dropOverlay = document.getElementById("drop-overlay");
       const viewer = createViewer({
           viewport,
           paperPreset: "bright-white",
@@ -244,10 +262,7 @@
           }
       };
 
-      document.getElementById("pdf-input").addEventListener("change", async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
+      const openPdf = async (file) => {
           loadingStatus.hidden = false;
           loadingStatus.textContent = "Loading PDF...";
           try {
@@ -258,6 +273,33 @@
               console.error(error);
               loadingStatus.textContent = "Could not load PDF";
           }
+      };
+
+      const openFiles = async (files) => {
+          const list = [...files];
+          const pdfs = list.filter((file) =>
+              file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+          );
+          const images = list.filter((file) => file.type.startsWith("image/"));
+
+          if (pdfs.length === 1 && list.length === 1) {
+              await openPdf(pdfs[0]);
+          } else if (images.length) {
+              await openImages(images);
+          } else if (pdfs.length) {
+              loadingStatus.hidden = false;
+              loadingStatus.textContent = "Drop one PDF at a time";
+          } else if (list.length) {
+              loadingStatus.hidden = false;
+              loadingStatus.textContent = "Drop a PDF or image files";
+          }
+      };
+
+      document.getElementById("pdf-input").addEventListener("change", async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          await openPdf(file);
       });
 
       document.getElementById("image-input").addEventListener("change", async (event) => {
@@ -265,6 +307,30 @@
           event.target.value = "";
           if (!files?.length) return;
           await openImages(files);
+      });
+
+      let dragDepth = 0;
+      window.addEventListener("dragenter", (event) => {
+          if (!event.dataTransfer?.types.includes("Files")) return;
+          event.preventDefault();
+          dragDepth += 1;
+          dropOverlay.hidden = false;
+      });
+      window.addEventListener("dragover", (event) => {
+          if (!event.dataTransfer?.types.includes("Files")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+      });
+      window.addEventListener("dragleave", (event) => {
+          if (!event.dataTransfer?.types.includes("Files")) return;
+          dragDepth = Math.max(0, dragDepth - 1);
+          if (dragDepth === 0) dropOverlay.hidden = true;
+      });
+      window.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          dragDepth = 0;
+          dropOverlay.hidden = true;
+          if (event.dataTransfer?.files.length) await openFiles(event.dataTransfer.files);
       });
 
       document.getElementById("zoom-in").addEventListener("click", () => viewer.adjustZoom(1));

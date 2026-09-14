@@ -1,7 +1,6 @@
 import {
   drawDirectionalLightFalloff,
 } from "./primitives.js";
-import { drawPaperTextureOverlay, getPaperTextureCanvasSync, loadPaperTextureCanvas } from "./paperTexture.js";
 import { SHARED_PREVIEW_SIZE } from "../previewSizing.js";
 
 // Content-effect processing is an app-side concern (the margin app's
@@ -48,13 +47,6 @@ export class SpreadRenderer {
     this.baseCanvas = null;
     this.doneCallbacks = [];
     this.lastRenderArgs = null;
-    this.paperTextureCanvas = getPaperTextureCanvasSync();
-    loadPaperTextureCanvas().then(canvas => {
-      this.paperTextureCanvas = canvas;
-      if (this.lastRenderArgs && !this.isAnimating) {
-        this.render(...this.lastRenderArgs);
-      }
-    });
   }
 
   get isAnimating() {
@@ -263,14 +255,6 @@ export class SpreadRenderer {
           }
         );
       }
-      const paperTextureStrength = Math.max(0, Math.min(1, display.paperTextureStrength ?? 0.2));
-      if (paperTextureStrength > 0.0001) {
-        for (const sideState of Object.values(sideStates)) {
-          if (sideState.page && sideState.drawnRect) {
-            drawPaperTextureOverlay(ctx, sideState.pageRect, this.paperTextureCanvas, { strength: paperTextureStrength });
-          }
-        }
-      }
     }
 
     return {
@@ -366,9 +350,18 @@ export class SpreadRenderer {
   #drawPlacedPreview(ctx, sideState) {
     const previewCanvas = sideState.page?.placedPreviewCanvas;
     if (!previewCanvas) return null;
+    // `drawnRect` is reported in source-bitmap terms (the app converts crop
+    // drags through its fitScale/sw/sh), so measure against the raw bitmap.
+    // ViewerPage.previewCanvas would hand back the app-composed page, whose
+    // margins are already baked in, and the measurement would come back
+    // placed twice.
+    const rawSource = sideState.page.rawPreviewCanvas
+      ?? sideState.page.rawDisplayCanvas
+      ?? sideState.page.previewCanvas
+      ?? sideState.page.displayCanvas;
     const measurement = this.#measurePageContent(
-      sideState.page.previewCanvas || sideState.page.displayCanvas,
-      sideState.page.getCropFor(sideState.page.previewCanvas || sideState.page.displayCanvas),
+      rawSource,
+      sideState.page.getCropFor(rawSource),
       sideState.contentRect.x,
       sideState.contentRect.y,
       sideState.contentRect.w,

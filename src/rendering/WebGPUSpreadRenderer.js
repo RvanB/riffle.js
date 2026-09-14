@@ -1,9 +1,9 @@
 import { drawPageBorder, getPageChromeColor } from "./primitives.js";
-import { getPaperTextureCanvasSync, loadPaperTextureCanvas } from "./paperTexture.js";
 import { SpreadRenderer } from "./SpreadRenderer.js";
 import { getPageGeometry } from "./layout.js";
 import { SHARED_PREVIEW_SIZE } from "../previewSizing.js";
 
+const EMPTY_SURFACE = Object.freeze({ canvas: null, placed: false });
 const MAX_SHADOW_OCCLUDERS = 8;
 const TURN_EASING_POWER = 3;
 const TURN_DURATION_MS = 750;
@@ -19,24 +19,10 @@ const MAX_PAGE_SURFACE_EDGE = 8192;
  * large GPU texture upload.
  *
  * @param {Object|null} page Viewer page.
- * @returns {HTMLCanvasElement|OffscreenCanvas|ImageBitmap|null} Preview-sized source, when available.
+ * @returns {{canvas: (HTMLCanvasElement|OffscreenCanvas|ImageBitmap|null), placed: boolean}} Tagged preview-sized source.
  */
 function getPreviewSurfaceSource(page) {
-  if (!page) return null;
-  const thumbnailCanvas = page.thumbnailCanvas ?? null;
-  const displayCanvas = page.displayCanvas ?? null;
-  const safeThumbnailCanvas = (
-    thumbnailCanvas
-    && thumbnailCanvas !== displayCanvas
-    && Math.max(thumbnailCanvas.width || 0, thumbnailCanvas.height || 0) <= SHARED_PREVIEW_SIZE * 4
-  )
-    ? thumbnailCanvas
-    : null;
-  return page.placedPreviewCanvas
-    ?? page.thumbnailSourceCanvas
-    ?? page.previewCanvas
-    ?? safeThumbnailCanvas
-    ?? null;
+  return page?.previewSurface ?? EMPTY_SURFACE;
 }
 
 /**
@@ -157,9 +143,12 @@ function buildSideStates(margins, pages, hasPlacedPages, options = {}) {
   const build = (sideName, entry) => {
     const page = entry?.page ?? null;
     const showThroughPage = entry?.showThroughPage ?? null;
-    const surfaceSource = preferPreviewSources
+    const surface = preferPreviewSources
       ? getPreviewSurfaceSource(page)
-      : page?.displayCanvas ?? null;
+      : page?.displaySurface ?? EMPTY_SURFACE;
+    // The page's own translucency texture is a page surface too, so it takes
+    // the same tagged path rather than re-deriving a bitmap by hand.
+    const translucency = page?.previewSurface ?? EMPTY_SURFACE;
     const rawPreviewSource = getRawPreviewSurfaceSource(showThroughPage);
     const rawDisplaySource = preferPreviewBackFaceSources
       ? rawPreviewSource
@@ -187,8 +176,10 @@ function buildSideStates(margins, pages, hasPlacedPages, options = {}) {
       pageIndex,
       showThroughPage,
       showThroughEffectEntry: entry?.showThroughEffectEntry ?? { pipeline: [], key: "" },
-      surfaceSource,
-      translucencySource: page?.previewCanvas ?? page?.thumbnailSourceCanvas ?? null,
+      surfaceSource: surface.canvas,
+      surfacePlaced: surface.placed,
+      translucencySource: translucency.canvas,
+      translucencyPlaced: translucency.placed,
       // Show-through composition still happens in the renderer (it needs the
       // back-side placement of the neighboring page). Pin the raw source
       // bitmaps so the helperRenderer can apply its own placement math.
@@ -518,7 +509,6 @@ export class WebGPUSpreadRenderer {
     // WebGPU's copyExternalImageToTexture rejects canvases without a
     // rendering context — make sure this empty fallback has one.
     this.emptyShowThroughCanvas.getContext("2d");
-    this.paperTextureCanvas = getPaperTextureCanvasSync();
     this.fallbackRenderer = null;
     this.animationFrame = 0;
     this.animations = [];
@@ -538,13 +528,6 @@ export class WebGPUSpreadRenderer {
       console.log(`[renderer] using ${this.backendName} (no navigator.gpu)`);
       return;
     }
-
-    loadPaperTextureCanvas().then(canvas => {
-      this.paperTextureCanvas = canvas;
-      if (this.lastRenderArgs && !this.isAnimating) {
-        this.render(...this.lastRenderArgs);
-      }
-    });
 
     this.initPromise = this.#init();
   }
@@ -641,8 +624,8 @@ export class WebGPUSpreadRenderer {
    */
   refreshPageSource(page) {
     if (this.fallbackRenderer || !page) return;
-    const newSurfaceSource = page.displayCanvas ?? null;
-    const newTranslucencySource = page.previewCanvas ?? page.thumbnailSourceCanvas ?? null;
+    const newDisplaySurface = page.displaySurface ?? EMPTY_SURFACE;
+    const newTranslucencySurface = page.previewSurface ?? EMPTY_SURFACE;
     // Show-through composition uses the raw (un-composed) bitmaps so the
     // helperRenderer can apply the opposite-side placement.
     const newRawDisplay = page.rawDisplayCanvas ?? page.thumbnailSourceCanvas ?? null;
@@ -661,9 +644,9 @@ export class WebGPUSpreadRenderer {
       if (!sideStates) continue;
       const usePreviewSources = !!scene.preferPreviewSources;
       const usePreviewBackFaceSources = scene.preferPreviewBackFaceSources ?? usePreviewSources;
-      const sceneSurfaceSource = usePreviewSources
+      const sceneSurface = usePreviewSources
         ? getPreviewSurfaceSource(page)
-        : newSurfaceSource;
+        : newDisplaySurface;
       const sceneRawDisplay = usePreviewBackFaceSources
         ? getRawPreviewSurfaceSource(page)
         : newRawDisplay;
@@ -671,8 +654,10 @@ export class WebGPUSpreadRenderer {
         const sideState = sideStates[sideName];
         if (!sideState) continue;
         if (sideState.page === page) {
-          sideState.surfaceSource = sceneSurfaceSource;
-          sideState.translucencySource = newTranslucencySource;
+          sideState.surfaceSource = sceneSurface.canvas;
+          sideState.surfacePlaced = sceneSurface.placed;
+          sideState.translucencySource = newTranslucencySurface.canvas;
+          sideState.translucencyPlaced = newTranslucencySurface.placed;
         }
         if (sideState.showThroughPage === page) {
           sideState.showThroughSurfaceSource = newRawPreview;
@@ -887,7 +872,6 @@ export class WebGPUSpreadRenderer {
               @group(0) @binding(3) var showThroughTex: texture_2d<f32>;
               @group(0) @binding(4) var backFaceTex: texture_2d<f32>;
               @group(0) @binding(5) var translucencyTex: texture_2d<f32>;
-              @group(0) @binding(6) var paperTex: texture_2d<f32>;
 
               fn pointInQuad(hit: vec3<f32>, p0: vec3<f32>, p1: vec3<f32>, p3: vec3<f32>) -> bool {
                 let uAxis = p1 - p0;
@@ -1149,7 +1133,6 @@ export class WebGPUSpreadRenderer {
                 );
                 let scatterCurve = pow(1.0 - clamp(diffuse, 0.0, 1.0), 1.4);
                 let paperThickness = clamp(uniforms.shadowInfo.z, 0.0, 1.0);
-                let paperTextureStrength = clamp(uniforms.shadowInfo.w, 0.0, 1.0);
                 let scatter = scatterTint * (scatterCurve * yellowness);
                 var hiddenContent = unpremultiply(hiddenTexel.rgb, hiddenTexel.a);
                 hiddenContent = applyNeutralize(hiddenContent);
@@ -1164,21 +1147,7 @@ export class WebGPUSpreadRenderer {
                 let hiddenLin = srgbToLinear(hiddenTransmission);
                 let showThrough = clamp(uniforms.effectD.z, 0.0, 1.0);
                 let transmittance = (1.0 - paperThickness) * showThrough;
-                let paperTexel = textureSample(paperTex, texSampler, input.pageUv).rgb;
-                let paperLuma = dot(paperTexel, vec3<f32>(0.2126, 0.7152, 0.0722));
-                let paperCentered = clamp((paperLuma - 0.965) * 3.4, -0.1, 0.075);
-                let paperChroma = clamp(
-                  paperTexel / max(vec3<f32>(paperLuma, paperLuma, paperLuma), vec3<f32>(0.0001, 0.0001, 0.0001)),
-                  vec3<f32>(0.97, 0.97, 0.97),
-                  vec3<f32>(1.03, 1.03, 1.03)
-                );
-                let paperMultiply = srgbToLinear(clamp(
-                  mix(vec3<f32>(1.0, 1.0, 1.0), paperChroma * (1.0 + paperCentered * 0.8), paperTextureStrength * 0.34),
-                  vec3<f32>(0.91, 0.91, 0.91),
-                  vec3<f32>(1.05, 1.05, 1.05)
-                ));
-                let paperLighting = 1.0 + paperCentered * 0.13 * paperTextureStrength;
-                let directShaded = lit * lightTint * shadowTint * attenuation * bounce * highlightBalance * paperLighting + scatter;
+                let directShaded = lit * lightTint * shadowTint * attenuation * bounce * highlightBalance + scatter;
                 let withShowThrough = directShaded * mix(vec3<f32>(1.0, 1.0, 1.0), hiddenLin, transmittance);
                 var shadedLinear = withShowThrough;
                 if (hasFacingPage) {
@@ -1198,7 +1167,6 @@ export class WebGPUSpreadRenderer {
                   shadedLinear = shadedLinear * mix(vec3<f32>(1.0, 1.0, 1.0), innerTintLin, innerMask);
                   shadedLinear = shadedLinear * mix(vec3<f32>(1.0, 1.0, 1.0), coreTintLin, coreMask);
                 }
-                shadedLinear = shadedLinear * paperMultiply;
                 return vec4<f32>(linearToSrgb(shadedLinear), 1.0);
               }
             `,
@@ -1618,7 +1586,6 @@ export class WebGPUSpreadRenderer {
     const backFaceResource = this.#getTextureResource(backFaceCanvas);
     const translucencyCanvas = this.#getTranslucencySurfaceCanvas(scene, sideState, side);
     const translucencyResource = this.#getTextureResource(translucencyCanvas);
-    const paperTextureResource = this.#getTextureResource(this.paperTextureCanvas);
     const gpuEffects = effectEntry?.gpu?.fragment || {
       neutralizeColor: null,
       bwEnabled: false,
@@ -1640,8 +1607,7 @@ export class WebGPUSpreadRenderer {
     uniformData.set([hasFacingPage ? 1 : 0, hingeOnRight ? 1 : 0, normalSign, flipX ? 1 : 0], 24);
     const paperThickness = Math.max(0, Math.min(1, scene.display.paperThickness ?? 0.5));
     const showThrough = Math.max(0, Math.min(1, scene.display.showThrough ?? 0));
-    const paperTextureStrength = Math.max(0, Math.min(1, scene.display.paperTextureStrength ?? 0.2));
-    uniformData.set([occluders.length, ignoreOccluderId, paperThickness, paperTextureStrength], 28);
+    uniformData.set([occluders.length, ignoreOccluderId, paperThickness, 0], 28);
     uniformData.set(paperColor, 32);
     uniformData.set([neutralize[0], neutralize[1], neutralize[2], neutralizeEnabled], 36);
     uniformData.set([
@@ -1691,7 +1657,6 @@ export class WebGPUSpreadRenderer {
         { binding: 3, resource: showThroughResource.view },
         { binding: 4, resource: backFaceResource.view },
         { binding: 5, resource: translucencyResource.view },
-        { binding: 6, resource: paperTextureResource.view },
       ],
     });
 
@@ -1703,20 +1668,43 @@ export class WebGPUSpreadRenderer {
   }
 
   #getPageSurfaceCanvas(scene, sideState, side) {
-    return this.#getRenderedPageSurfaceCanvas(scene, sideState, side, sideState.surfaceSource, this.pageSurfaceCache);
+    return this.#getRenderedPageSurfaceCanvas(
+      scene,
+      sideState,
+      side,
+      sideState.surfaceSource,
+      this.pageSurfaceCache,
+      !!sideState.surfacePlaced,
+    );
   }
 
   #getTranslucencySurfaceCanvas(scene, sideState, side) {
     const sourceCanvas = sideState?.translucencySource ?? null;
     if (!sourceCanvas) return this.emptyShowThroughCanvas;
-    return this.#getRenderedPageSurfaceCanvas(scene, sideState, side, sourceCanvas, this.translucencySurfaceCache);
+    return this.#getRenderedPageSurfaceCanvas(
+      scene,
+      sideState,
+      side,
+      sourceCanvas,
+      this.translucencySurfaceCache,
+      !!sideState.translucencyPlaced,
+    );
   }
 
-  #getRenderedPageSurfaceCanvas(scene, sideState, side, sourceCanvas, cacheStore) {
+  #getRenderedPageSurfaceCanvas(scene, sideState, side, sourceCanvas, cacheStore, isPlaced) {
     if (!sideState?.page || !sourceCanvas) return null;
+    // `isPlaced` comes from ViewerPage, which knows which slot the bitmap came
+    // out of. Do not try to recognise a composed page from its dimensions:
+    // composed canvases are integer-rounded, so a small one's aspect can miss
+    // the page's by more than any sane tolerance, and a canvas composed under
+    // a previous layout misses it outright — either way the page would be
+    // composed a second time and the content would shrink into its own text
+    // block. The inverse guess is just as bad: a raw bitmap that happens to
+    // match the page aspect would be drawn full-bleed, with no margins at all.
+    if (isPlaced) return sourceCanvas;
+
+    // Raw content: compose it onto a page-shaped surface at the page's aspect.
     const pageAspect = sideState.pageRect.w / sideState.pageRect.h;
-    const sourceAspect = sourceCanvas.width / sourceCanvas.height;
-    if (Math.abs(pageAspect - sourceAspect) < 0.001) return sourceCanvas;
 
     let pageCache = cacheStore.get(sideState.page);
     if (!pageCache || pageCache.srcCanvas !== sourceCanvas) {

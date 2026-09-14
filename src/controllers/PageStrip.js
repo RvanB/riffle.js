@@ -1,5 +1,21 @@
 import { PAGE_STRIP_DISPLAY_HEIGHT, SHARED_PREVIEW_SIZE } from "../previewSizing.js";
 
+/**
+ * Thumbnail page strip.
+ *
+ * {@link createPageStrip} wraps this for the common case — one call, bound to a
+ * viewer, no configuration. Use the class directly when the host owns its own
+ * page model, selection, or thumbnail sources: it draws whichever of
+ * `placedPreviewCanvas` / `thumbnailCanvas` / `previewCanvas` a page carries,
+ * and asks the host for display, layout, and per-page effect entries.
+ *
+ * @param {HTMLElement} container Element to populate with thumbnails.
+ * @param {Object} callbacks Host callbacks.
+ * @param {function(number, MouseEvent):void} callbacks.onPageClick Called with the clicked page index and the original event.
+ * @param {function(Object):{pipeline: Array, key: string}} callbacks.getEffectEntry Per-page effect entry; its `key` participates in the repaint cache key.
+ * @param {function():Object} callbacks.getDisplay Returns display settings (`paperColor`, `contentBlendMode`).
+ * @param {function():Object|null} callbacks.getLayout Returns page layout, used for thumbnail aspect.
+ */
 export class PageStrip {
   constructor(container, { onPageClick, getEffectEntry, getDisplay, getLayout }) {
     this.container = container;
@@ -28,6 +44,15 @@ export class PageStrip {
     this.container.scrollLeft = 0;
   }
 
+  /**
+   * @param {Object} book Book with a `pages` array and `spreadPageEntries(i)`.
+   * @param {Object} uiState Strip state.
+   * @param {number} uiState.effectiveSpread Spread to highlight and scroll to.
+   * @param {number} [uiState.editingPageIdx=-1] Page drawn as active.
+   * @param {Set<number>} [uiState.selectedPageIdxs] Pages drawn as selected.
+   * @param {boolean} [uiState.showSelection=true] Whether to paint active/selected styling.
+   * @returns {void}
+   */
   update(book, uiState) {
     if (!book.pages.length) {
       this.#clear();
@@ -47,8 +72,13 @@ export class PageStrip {
     book.pages.forEach((page, index) => {
       const record = this.thumbs[index];
       const inSpread = index === leftIndex || index === rightIndex;
-      const isActive = uiState.appMode === "content" && index === uiState.editingPageIdx;
-      const isSelected = uiState.appMode === "content" && uiState.selectedPageIdxs.has(index);
+      // `showSelection` lets a host suppress the active/selected styling
+      // without clearing its own selection state (margin keeps a selection in
+      // both of its modes but only paints it in one). Defaults to on, so a
+      // host that simply never selects anything needs no flag.
+      const showSelection = uiState.showSelection !== false;
+      const isActive = showSelection && index === uiState.editingPageIdx;
+      const isSelected = showSelection && !!uiState.selectedPageIdxs?.has(index);
       record.thumb.classList.toggle("in-spread", inSpread);
       record.thumb.classList.toggle("active", isActive);
       record.thumb.classList.toggle("selected", isSelected);
