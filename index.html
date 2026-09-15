@@ -42,6 +42,30 @@
           border-bottom: 1px solid #555;
       }
       .doc-link:hover { color: #ddd; border-bottom-color: #ddd; }
+      #paper-controls {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #888;
+          font-size: 13px;
+      }
+      #paper-controls select {
+          background: #2a2a2a;
+          color: #ddd;
+          border: 1px solid #444;
+          border-radius: 4px;
+          padding: 5px 8px;
+          font: inherit;
+      }
+      #paper-controls input[type="range"] {
+          width: 110px;
+          accent-color: #6af;
+      }
+      #show-through-value {
+          width: 2.4em;
+          color: #ddd;
+          font-variant-numeric: tabular-nums;
+      }
       #page-jump {
           display: flex;
           align-items: center;
@@ -177,6 +201,13 @@
         <input id="page-input" type="number" min="1" value="" />
         <span id="spread-readout">pages —</span>
       </div>
+      <div id="paper-controls">
+        <label for="paper-preset">Paper</label>
+        <select id="paper-preset"></select>
+        <label for="show-through">Show-through</label>
+        <input id="show-through" type="range" min="0" max="1" step="0.01" value="0.35" />
+        <span id="show-through-value">0.35</span>
+      </div>
       <div class="zoom-controls">
         <button id="zoom-out" type="button">−</button>
         <button id="zoom-in" type="button">+</button>
@@ -207,11 +238,34 @@
           viewport,
           paperPreset: "bright-white",
           renderScale: 1.5,
-          paperThickness: 1,
-          showThrough: 0, // Show-through is off by default; opt in to showcase it.
+          // transmittance is (1 - paperThickness) * showThrough, so pinning
+          // thickness at 0 makes the slider below the direct control.
+          paperThickness: 0,
+          showThrough: 0.35,
       });
       stage.appendChild(viewer);
       stripContainer.appendChild(createPageStrip(viewer));
+
+      const paperPreset = document.getElementById("paper-preset");
+      for (const { id, label } of viewer.paperPresets) {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = label;
+          paperPreset.appendChild(option);
+      }
+      paperPreset.value = viewer.display.paperPreset;
+      paperPreset.addEventListener("change", () => viewer.setPaperPreset(paperPreset.value));
+
+      const showThrough = document.getElementById("show-through");
+      const showThroughValue = document.getElementById("show-through-value");
+      const syncShowThrough = () => {
+          showThroughValue.textContent = Number(showThrough.value).toFixed(2);
+      };
+      showThrough.addEventListener("input", () => {
+          viewer.setDisplay({ showThrough: Number(showThrough.value) });
+          syncShowThrough();
+      });
+      syncShowThrough();
 
       const pageInput = document.getElementById("page-input");
       const spreadReadout = document.getElementById("spread-readout");

@@ -66,7 +66,7 @@ loads a PDF or a set of images and turns pages with the arrow keys:
     <div id="strip"></div>
 
     <script type="module">
-      import { createViewer, createPageStrip } from "https://cdn.jsdelivr.net/gh/RvanB/riffle.js@v0.2.0/dist/riffle.min.js";
+      import { createViewer, createPageStrip } from "https://cdn.jsdelivr.net/gh/RvanB/riffle.js@0.4.1/dist/riffle.min.js";
 
       const viewer = createViewer();
       document.getElementById("viewport").append(viewer);
@@ -112,6 +112,16 @@ The public API is intentionally small:
 - `createPageStrip(viewer)` — create a thumbnail strip bound to a viewer.
 - The viewer element's methods (`openPdf`, `openImages`, `navigateBy`,
   `goToPage`, `adjustZoom`, `resetZoom`, `on`, `off`, …).
+
+For hosts that keep their own page model rather than handing Riffle a file and
+letting it drive:
+
+- `PageSource` / `ImagePageSource` / `PdfPageSource` — describe a page set.
+- `PageStrip` — the thumbnail strip as a configurable class, for when
+  `createPageStrip` is too opinionated (your own selection, click handling or
+  thumbnail sources).
+- `PdfDocument` — open a PDF and rasterise its pages without Riffle owning
+  them, so you don't ship a second PDF engine.
 
 Everything documented in the [guides & API reference](https://rvanb.github.io/riffle.js/docs/)
 is stable. Undocumented properties, internal modules under `src/`, and the DOM

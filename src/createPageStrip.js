@@ -33,6 +33,8 @@ export function createPageStrip(viewer) {
 
   bookViewer.on("sourcechange", refresh);
   bookViewer.on("spreadchange", refresh);
+  // Paper color and blend mode feed the thumbnails' repaint key.
+  bookViewer.on("displaychange", refresh);
   // Scroll-track the in-flight target so the strip moves WITH the page
   // turn instead of waiting for it to settle.
   bookViewer.on("effectivespreadchange", refresh);

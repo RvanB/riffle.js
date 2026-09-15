@@ -46,7 +46,7 @@ lives, how it sizes, and how it scrolls.
     <div id="viewport"></div>
 
     <script type="module">
-      import { createViewer } from "https://cdn.jsdelivr.net/gh/RvanB/riffle.js@v0.2.0/dist/riffle.min.js";
+      import { createViewer } from "https://cdn.jsdelivr.net/gh/RvanB/riffle.js@0.4.1/dist/riffle.min.js";
 
       const viewer = createViewer();
       document.getElementById("viewport").append(viewer);

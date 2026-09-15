@@ -206,6 +206,19 @@ export class BookViewer {
   setDisplay(display) {
     this.display = { ...this.display, ...display };
     this.redraw();
+    // Anything drawing from `display` outside the spread canvas — the page
+    // strip's thumbnails, most obviously — has no other way to know.
+    this.emit("displaychange", { display: this.display });
+  }
+
+  /**
+   * Applies a paper preset, deriving paper/scatter/shadow colors from it.
+   *
+   * @param {string} presetId Preset id from {@link BookViewer#paperPresets}.
+   * @returns {void}
+   */
+  setPaperPreset(presetId) {
+    this.setDisplay(applyPaperPreset({ ...this.display }, presetId));
   }
 
   /**

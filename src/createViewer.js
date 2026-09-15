@@ -2,6 +2,7 @@ import { BookViewer } from "./BookViewer.js";
 import { WebGPUSpreadRenderer } from "./rendering/WebGPUSpreadRenderer.js";
 import { SpreadRenderer } from "./rendering/SpreadRenderer.js";
 import { PdfTextLayerController } from "./controllers/PdfTextLayerController.js";
+import { getPaperPresetOptions } from "./model/paper.js";
 
 function pickRendererClass(option) {
   if (option === "2d") return SpreadRenderer;
@@ -360,6 +361,15 @@ export function createViewer({
       }
       return pages;
     },
+
+    // --- Appearance ---
+    // A copy: mutating the viewer's own display object would change what is
+    // drawn without redrawing. Go through setDisplay / setPaperPreset.
+    get display() { return { ...bookViewer.display }; },
+    get paperPresets() { return getPaperPresetOptions(); },
+    setDisplay: (fields) => bookViewer.setDisplay(fields),
+    setPaperPreset: (presetId) => bookViewer.setPaperPreset(presetId),
+    setShowPageBorder: (show) => bookViewer.setShowPageBorder(show),
 
     // --- Zoom ---
     get contentZoom() { return bookViewer.contentZoom; },

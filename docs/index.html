@@ -67,7 +67,8 @@
     <section class="readme usertext">
         <article><h1>riffle.js</h1>
 <p>riffle.js is a browser book viewer for page bitmaps and PDFs. It renders a
-two-page spread with animated page turns, paper lighting, and translucency.</p>
+two-page spread with animated page turns, paper lighting, and optional
+show-through translucency.</p>
 <p>Riffle is <strong>DOM-native and framework-agnostic</strong>: a viewer <em>is</em> a DOM element
 with a small set of methods. There is no controller object and no mounting
 step — you create an element, append it, and call methods on it. Nothing
@@ -93,7 +94,8 @@ await viewer.openPdf(file);    // call methods directly on it
 <p>Riffle never wraps your layout or injects styling — you decide where the viewer
 lives, how it sizes, and how it scrolls.</p>
 <h2>Quick start</h2>
-<p>A minimal, paste-and-run HTML file with a viewer and a thumbnail strip:</p>
+<p>A minimal, paste-and-run HTML file with a viewer and a thumbnail strip that
+loads a PDF or a set of images and turns pages with the arrow keys:</p>
 <pre class="prettyprint source lang-html"><code>&lt;!DOCTYPE html>
 &lt;html lang=&quot;en&quot;>
   &lt;head>
@@ -109,26 +111,37 @@ lives, how it sizes, and how it scrolls.</p>
       /* Style the page strip through its stable class. */
       .riffle-page-strip {
         display: flex;
-        flex-direction: row;
         gap: 4px;
         overflow-x: auto;
       }
     &lt;/style>
   &lt;/head>
   &lt;body>
-    &lt;input id=&quot;file-picker&quot; type=&quot;file&quot; accept=&quot;application/pdf&quot; />
+    &lt;input id=&quot;pdf&quot; type=&quot;file&quot; accept=&quot;application/pdf&quot; />
+    &lt;input id=&quot;images&quot; type=&quot;file&quot; accept=&quot;image/*&quot; multiple />
     &lt;div id=&quot;viewport&quot;>&lt;/div>
     &lt;div id=&quot;strip&quot;>&lt;/div>
 
     &lt;script type=&quot;module&quot;>
-      import { createViewer, createPageStrip } from &quot;https://cdn.jsdelivr.net/gh/RvanB/riffle.js@v0.2.0/dist/riffle.min.js&quot;;
+      import { createViewer, createPageStrip } from &quot;https://cdn.jsdelivr.net/gh/RvanB/riffle.js@0.4.1/dist/riffle.min.js&quot;;
 
       const viewer = createViewer();
       document.getElementById(&quot;viewport&quot;).append(viewer);
       document.getElementById(&quot;strip&quot;).append(createPageStrip(viewer));
 
-      document.getElementById(&quot;file-picker&quot;).addEventListener(&quot;change&quot;, (e) => {
+      // Load a PDF…
+      document.getElementById(&quot;pdf&quot;).addEventListener(&quot;change&quot;, (e) => {
         viewer.openPdf(e.target.files[0]);
+      });
+      // …or a set of images, one page each.
+      document.getElementById(&quot;images&quot;).addEventListener(&quot;change&quot;, (e) => {
+        viewer.openImages(e.target.files);
+      });
+
+      // Turn pages with the arrow keys.
+      addEventListener(&quot;keydown&quot;, (e) => {
+        if (e.key === &quot;ArrowRight&quot;) viewer.navigateBy(+1);
+        if (e.key === &quot;ArrowLeft&quot;) viewer.navigateBy(-1);
       });
     &lt;/script>
   &lt;/body>
@@ -139,6 +152,7 @@ lives, how it sizes, and how it scrolls.</p>
 <ul>
 <li><strong>Getting started</strong> — the programming model and your first viewer.</li>
 <li><strong>Load a PDF</strong> — from a file, a URL, or bytes.</li>
+<li><strong>Display images</strong> — one page per image with <code>openImages</code>.</li>
 <li><strong>Navigate pages</strong> — turn pages and track position.</li>
 <li><strong>Add a thumbnail strip</strong> — <code>createPageStrip</code> and styling.</li>
 <li><strong>Control zoom</strong> — zoom methods and wheel/trackpad zoom.</li>
@@ -150,8 +164,18 @@ lives, how it sizes, and how it scrolls.</p>
 <ul>
 <li><code>createViewer(options)</code> — create a viewer element.</li>
 <li><code>createPageStrip(viewer)</code> — create a thumbnail strip bound to a viewer.</li>
-<li>The viewer element's methods (<code>openPdf</code>, <code>navigateTo</code>, <code>navigateBy</code>,
-<code>adjustZoom</code>, <code>resetZoom</code>, <code>on</code>, <code>off</code>, …).</li>
+<li>The viewer element's methods (<code>openPdf</code>, <code>openImages</code>, <code>navigateBy</code>,
+<code>goToPage</code>, <code>adjustZoom</code>, <code>resetZoom</code>, <code>on</code>, <code>off</code>, …).</li>
+</ul>
+<p>For hosts that keep their own page model rather than handing Riffle a file and
+letting it drive:</p>
+<ul>
+<li><code>PageSource</code> / <code>ImagePageSource</code> / <code>PdfPageSource</code> — describe a page set.</li>
+<li><code>PageStrip</code> — the thumbnail strip as a configurable class, for when
+<code>createPageStrip</code> is too opinionated (your own selection, click handling or
+thumbnail sources).</li>
+<li><code>PdfDocument</code> — open a PDF and rasterise its pages without Riffle owning
+them, so you don't ship a second PDF engine.</li>
 </ul>
 <p>Everything documented in the <a href="https://rvanb.github.io/riffle.js/docs/">guides &amp; API reference</a>
 is stable. Undocumented properties, internal modules under <code>src/</code>, and the DOM
