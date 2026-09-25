@@ -2,12 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Riffle — standalone demo</title>
     <style>
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; height: 100%; }
       body {
+          height: 100dvh;
+          overflow: hidden;
           display: flex;
           flex-direction: column;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -15,15 +17,20 @@
           color: #ddd;
       }
       header {
+          flex: 0 0 auto;
           display: flex;
           align-items: center;
           flex-wrap: wrap;
-          gap: 16px;
-          padding: 10px 16px;
+          gap: 8px;
+          max-height: 45%;
+          overflow: auto;
+          padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
           background: #111;
           border-bottom: 1px solid #333;
       }
       .file-picker {
+          position: relative;
+          min-height: 44px;
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -33,9 +40,14 @@
           border-radius: 4px;
           border: 1px solid #444;
       }
-      .file-picker input { display: none; }
+      .file-picker input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+      .file-picker:focus-within, :focus-visible { outline: 2px solid #6af; outline-offset: 2px; }
       .file-picker:hover { background: #333; }
       .doc-link {
+          display: inline-flex;
+          align-items: center;
+          min-height: 44px;
+          padding: 0 8px;
           color: #aaa;
           font-size: 13px;
           text-decoration: none;
@@ -46,6 +58,8 @@
           display: flex;
           align-items: center;
           gap: 8px;
+          flex-wrap: wrap;
+          padding: 8px 0;
           color: #888;
           font-size: 13px;
       }
@@ -56,9 +70,12 @@
           border-radius: 4px;
           padding: 5px 8px;
           font: inherit;
+          font-size: 16px;
+          min-height: 44px;
       }
       #paper-controls input[type="range"] {
           width: 110px;
+          min-height: 44px;
           accent-color: #6af;
       }
       #show-through-value {
@@ -72,6 +89,10 @@
           gap: 6px;
           color: #888;
           font-size: 13px;
+          justify-content: center;
+          flex-wrap: wrap;
+          padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left));
+          background: #161616;
       }
       #page-input {
           width: 56px;
@@ -81,25 +102,72 @@
           border-radius: 4px;
           padding: 4px 6px;
           font: inherit;
+          font-size: 16px;
+          min-height: 44px;
           text-align: right;
       }
       #page-input::-webkit-outer-spin-button,
       #page-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       #page-input { -moz-appearance: textfield; }
-      .zoom-controls { margin-left: auto; display: flex; gap: 4px; }
-      .zoom-controls button {
-          width: 32px; height: 32px;
+      .zoom-controls { display: flex; gap: 4px; }
+      button, summary {
+          min-width: 44px; min-height: 44px;
+          padding: 6px 10px;
           background: #2a2a2a; color: #ddd;
           border: 1px solid #444; border-radius: 4px;
-          font-size: 18px; cursor: pointer;
+          font: inherit; font-size: 14px; cursor: pointer;
       }
-      .zoom-controls button:hover { background: #333; }
+      button:hover, summary:hover { background: #333; }
+      button:disabled { opacity: 0.35; cursor: default; }
+      summary { display: flex; align-items: center; width: fit-content; list-style: none; }
+      summary::-webkit-details-marker { display: none; }
+      summary::after { content: " +"; white-space: pre; }
+      details[open] summary::after { content: " −"; }
+      #paper-settings { margin-left: auto; }
+      #paper-settings[open] { order: 2; flex-basis: 100%; }
+      #hide-toolbar { margin-left: auto; }
+      .strip-icon { display: none; }
+      [hidden] { display: none !important; }
+      #show-toolbar {
+          position: fixed;
+          top: max(8px, env(safe-area-inset-top));
+          right: max(8px, env(safe-area-inset-right));
+          z-index: 5;
+          box-shadow: 0 2px 12px #0008;
+      }
+      #reader-footer { flex: 0 0 auto; padding-bottom: env(safe-area-inset-bottom); background: #161616; }
+      #gesture-hint { margin: 0; padding: 0 8px 4px; text-align: center; color: #999; font-size: 12px; }
+      #empty-state { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 24px; color: #aaa; pointer-events: none; }
+      #empty-state strong { color: #ddd; font-size: 20px; }
+      @media (max-width: 600px) {
+          header { gap: 6px; }
+          .file-picker { padding: 6px 8px; font-size: 14px; }
+          #paper-settings { margin-left: 0; }
+          .zoom-controls { margin-left: auto; }
+          #hide-toolbar { margin-left: 0; }
+          #spread-readout { min-width: 108px; }
+      }
+      @media (max-height: 500px) {
+          #gesture-hint { display: none; }
+      }
+      @media (max-width: 360px) {
+          .file-picker { font-size: 13px; }
+          .doc-link { padding: 0; font-size: 12px; }
+          .strip-label { display: none; }
+          .strip-icon { display: inline; font-size: 20px; }
+      }
 
       #viewport {
           flex: 1;
+          min-height: 0;
+          min-width: 0;
           overflow: auto;
           position: relative;
+          overscroll-behavior: contain;
+          touch-action: var(--reader-touch-action, pan-y pinch-zoom);
       }
+      /* Touch drags belong to the reader; mouse/pen text selection still works. */
+      #viewport .riffle-pdf-text-layer { touch-action: var(--reader-touch-action, pan-y pinch-zoom); }
       #stage {
           min-width: 100%;
           min-height: 100%;
@@ -142,13 +210,13 @@
       }
       #drop-overlay[hidden] { display: none; }
       #strip-container {
-          flex: 0 0 64px;
+          height: 64px;
           background: #161616;
           border-top: 1px solid #333;
           overflow: hidden;
           display: flex;
           align-items: center;
-          padding: 0 8px;
+          padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
       }
       /* The page strip element the library creates. Style it via its stable
          class. Allow programmatic scrollLeft (the strip keeps the in-spread
@@ -164,6 +232,7 @@
       }
       .riffle-page-strip::-webkit-scrollbar { display: none; }  /* WebKit */
       .strip-thumb {
+          min-width: 44px;
           display: inline-flex;
           flex-direction: column;
           align-items: center;
@@ -187,7 +256,7 @@
     </style>
   </head>
   <body>
-    <header>
+    <header id="toolbar" aria-label="Reader controls">
       <label class="file-picker">
         <span>Open PDF</span>
         <input type="file" id="pdf-input" accept="application/pdf" />
@@ -197,28 +266,41 @@
         <input type="file" id="image-input" accept="image/*" multiple />
       </label>
       <a class="doc-link" href="./docs/">Docs</a>
-      <div id="page-jump">
-        <input id="page-input" type="number" min="1" value="" />
-        <span id="spread-readout">pages —</span>
-      </div>
-      <div id="paper-controls">
-        <label for="paper-preset">Paper</label>
-        <select id="paper-preset"></select>
-        <label for="show-through">Show-through</label>
-        <input id="show-through" type="range" min="0" max="1" step="0.01" value="0.35" />
-        <span id="show-through-value">0.35</span>
-      </div>
+      <button id="hide-toolbar" type="button" aria-label="Hide controls" aria-controls="toolbar" aria-expanded="true">Hide</button>
+      <details id="paper-settings">
+        <summary>Paper</summary>
+        <div id="paper-controls">
+          <label for="paper-preset">Paper</label>
+          <select id="paper-preset"></select>
+          <label for="show-through">Show-through</label>
+          <input id="show-through" type="range" min="0" max="1" step="0.01" value="0.35" />
+          <span id="show-through-value">0.35</span>
+        </div>
+      </details>
+      <button id="toggle-strip" type="button" aria-label="Thumbnails" title="Show or hide thumbnails" aria-controls="strip-container" aria-expanded="true"><span class="strip-label">Thumbnails</span><span class="strip-icon" aria-hidden="true">▦</span></button>
       <div class="zoom-controls">
-        <button id="zoom-out" type="button">−</button>
-        <button id="zoom-in" type="button">+</button>
+        <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" type="button" title="Fit spread to screen">Fit</button>
+        <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
       </div>
     </header>
-    <div id="viewport">
+    <button id="show-toolbar" type="button" aria-controls="toolbar" aria-expanded="false" hidden>Show controls</button>
+    <main id="viewport" aria-label="Book reader" aria-describedby="gesture-hint">
       <div id="stage"></div>
+      <div id="empty-state"><strong>Open a book to start reading</strong><p>Choose a PDF or a set of images above.</p></div>
       <div id="loading-status" role="status" hidden>Loading PDF...</div>
-    </div>
+    </main>
     <div id="drop-overlay" aria-hidden="true" hidden>Drop a PDF or images to open</div>
-    <div id="strip-container"></div>
+    <footer id="reader-footer">
+      <div id="page-jump">
+        <button id="previous-page" type="button" aria-label="Previous spread">←</button>
+        <input id="page-input" type="number" min="1" value="" inputmode="numeric" aria-label="Go to page" />
+        <span id="spread-readout" aria-live="polite">pages —</span>
+        <button id="next-page" type="button" aria-label="Next spread">→</button>
+      </div>
+      <p id="gesture-hint">Swipe to turn pages · Zoom in to pan</p>
+      <div id="strip-container"></div>
+    </footer>
     <script type="importmap">
       {
           "imports": {
@@ -228,6 +310,7 @@
     </script>
     <script type="module">
       import { createViewer, createPageStrip } from "riffle";
+      import { enablePageSwipes } from "./demo/pageSwipes.js";
 
       const viewport = document.getElementById("viewport");
       const stage = document.getElementById("stage");
@@ -245,6 +328,30 @@
       });
       stage.appendChild(viewer);
       stripContainer.appendChild(createPageStrip(viewer));
+      enablePageSwipes(viewport, viewer);
+      viewer.on("zoomchange", () => {
+          document.getElementById("gesture-hint").textContent = viewer.contentZoom > 1.001
+              ? "Drag to pan · Tap Fit to enable page swipes"
+              : "Swipe to turn pages · Zoom in to pan";
+      });
+
+      const toolbar = document.getElementById("toolbar");
+      const hideToolbar = document.getElementById("hide-toolbar");
+      const showToolbar = document.getElementById("show-toolbar");
+      const setToolbarVisible = (visible) => {
+          toolbar.hidden = !visible;
+          showToolbar.hidden = visible;
+          hideToolbar.setAttribute("aria-expanded", String(visible));
+          showToolbar.setAttribute("aria-expanded", String(visible));
+          (visible ? hideToolbar : showToolbar).focus({ preventScroll: true });
+      };
+      hideToolbar.addEventListener("click", () => setToolbarVisible(false));
+      showToolbar.addEventListener("click", () => setToolbarVisible(true));
+      const toggleStrip = document.getElementById("toggle-strip");
+      toggleStrip.addEventListener("click", () => {
+          stripContainer.hidden = !stripContainer.hidden;
+          toggleStrip.setAttribute("aria-expanded", String(!stripContainer.hidden));
+      });
 
       const paperPreset = document.getElementById("paper-preset");
       for (const { id, label } of viewer.paperPresets) {
@@ -269,6 +376,10 @@
 
       const pageInput = document.getElementById("page-input");
       const spreadReadout = document.getElementById("spread-readout");
+      const previousPage = document.getElementById("previous-page");
+      const nextPage = document.getElementById("next-page");
+      previousPage.addEventListener("click", () => viewer.navigateBy(-1));
+      nextPage.addEventListener("click", () => viewer.navigateBy(1));
 
       const spreadLabel = (spread) => {
           const pages = viewer.pagesInSpread(spread);
@@ -281,6 +392,9 @@
               ? `pages ${spreadLabel(viewer.effectiveSpread)} of ${total}`
               : "pages —";
           pageInput.disabled = total <= 0;
+          previousPage.disabled = total <= 0 || viewer.effectiveSpread <= 0;
+          nextPage.disabled = total <= 0 || viewer.effectiveSpread >= viewer.numSpreads - 1;
+          document.getElementById("empty-state").hidden = total > 0;
           pageInput.max = String(Math.max(1, total));
           if (document.activeElement !== pageInput) {
               const current = viewer.pagesInSpread(viewer.effectiveSpread)[0];
@@ -305,6 +419,7 @@
           const list = [...files];
           if (!list.length) return;
           loadingStatus.hidden = false;
+          document.getElementById("empty-state").hidden = true;
           loadingStatus.textContent = list.length === 1 ? "Loading image..." : "Loading images...";
           try {
               await viewer.openImages(list);
@@ -318,6 +433,7 @@
 
       const openPdf = async (file) => {
           loadingStatus.hidden = false;
+          document.getElementById("empty-state").hidden = true;
           loadingStatus.textContent = "Loading PDF...";
           try {
               await viewer.openPdf(file);
@@ -357,7 +473,7 @@
       });
 
       document.getElementById("image-input").addEventListener("change", async (event) => {
-          const files = event.target.files;
+          const files = [...event.target.files];
           event.target.value = "";
           if (!files?.length) return;
           await openImages(files);
@@ -389,12 +505,16 @@
 
       document.getElementById("zoom-in").addEventListener("click", () => viewer.adjustZoom(1));
       document.getElementById("zoom-out").addEventListener("click", () => viewer.adjustZoom(-1));
+      document.getElementById("zoom-reset").addEventListener("click", () => viewer.resetZoom());
 
       window.addEventListener("keydown", (event) => {
-          if (event.target.tagName === "INPUT") return;
+          if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          if (event.target.closest("input, select, textarea, button, summary, a, [contenteditable]")) return;
           if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+              event.preventDefault();
               viewer.navigateBy(1);
           } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+              event.preventDefault();
               viewer.navigateBy(-1);
           }
       });

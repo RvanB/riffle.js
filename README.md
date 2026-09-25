@@ -16,6 +16,14 @@ assumes React, Vue, Angular, or any framework.
 
 *A screenshot of [the demo](https://rvanbronkhorst.com/riffle.js/) — view its [source](https://github.com/RvanB/riffle.js/blob/main/index.html).*
 
+On touchscreens, swipe left or right in the standalone demo to turn spreads.
+Use the zoom buttons to enlarge a page and drag to pan; **Fit** restores swipe
+navigation. **Hide** collapses the top controls, and **Show controls** brings
+them back. The thumbnail toggle frees up more reading space, while the bottom
+page buttons and page number remain available. Paper settings expand on demand.
+
+Run the demo gesture regression checks with `node --test demo/pageSwipes.test.js`.
+
 ## The programming model
 
 ```js
