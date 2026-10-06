@@ -177,12 +177,24 @@ function pickRendererClass(option) {
  */
 
 /**
- * Multiplies the current zoom by a factor.
+ * Zooms in or out by one step.
  *
  * @function adjustZoom
  * @memberof RiffleViewer
  * @instance
- * @param {number} factor Zoom multiplier, e.g. `1.25` to zoom in, `0.8` out.
+ * @param {number} direction Positive to zoom in, negative to zoom out.
+ * @returns {void}
+ */
+
+/**
+ * Sets the book zoom, clamped to 0.5–6. An optional point in browser client
+ * coordinates keeps that point on the book beneath a pinch gesture.
+ *
+ * @function setZoom
+ * @memberof RiffleViewer
+ * @instance
+ * @param {number} zoom Absolute zoom (`1` fits the spread).
+ * @param {{clientX: number, clientY: number}} [anchor] Zoom focal point.
  * @returns {void}
  */
 
@@ -374,6 +386,7 @@ export function createViewer({
     // --- Zoom ---
     get contentZoom() { return bookViewer.contentZoom; },
     adjustZoom: (d) => bookViewer.adjustZoom(d),
+    setZoom: (zoom, anchor) => bookViewer.setZoom(zoom, anchor),
     resetZoom: () => bookViewer.resetZoom(),
     setViewport: (el) => bookViewer.setViewport(el),
 

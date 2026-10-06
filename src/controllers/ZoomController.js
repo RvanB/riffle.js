@@ -89,22 +89,26 @@ export class ZoomController {
     if (spreadCanvas.style.maxHeight !== "none") spreadCanvas.style.maxHeight = "none";
   }
 
-  #zoomTo(nextZoom) {
+  #zoomTo(nextZoom, anchor = null) {
     if (Math.abs(nextZoom - this.contentZoom) < 0.0001) return;
     const viewport = this.#resolveViewport();
-    const viewportWidth = viewport?.clientWidth ?? 0;
-    const viewportHeight = viewport?.clientHeight ?? 0;
-    const centerX = (viewport?.scrollLeft ?? 0) + viewportWidth / 2;
-    const centerY = (viewport?.scrollTop ?? 0) + viewportHeight / 2;
-    const zoomRatio = nextZoom / this.contentZoom;
+    const viewportRect = viewport?.getBoundingClientRect();
+    const clientX = Number.isFinite(anchor?.clientX)
+      ? anchor.clientX : (viewportRect?.left ?? 0) + (viewport?.clientWidth ?? 0) / 2;
+    const clientY = Number.isFinite(anchor?.clientY)
+      ? anchor.clientY : (viewportRect?.top ?? 0) + (viewport?.clientHeight ?? 0) / 2;
+    const before = this.viewer.spreadCanvas.getBoundingClientRect();
+    const bookX = before.width > 0 ? (clientX - before.left) / before.width : 0.5;
+    const bookY = before.height > 0 ? (clientY - before.top) / before.height : 0.5;
 
     this.contentZoom = nextZoom;
     this.syncCanvasStage();
     if (viewport) {
-      requestAnimationFrame(() => {
-        viewport.scrollLeft = Math.max(0, centerX * zoomRatio - viewportWidth / 2);
-        viewport.scrollTop = Math.max(0, centerY * zoomRatio - viewportHeight / 2);
-      });
+      const after = this.viewer.spreadCanvas.getBoundingClientRect();
+      // Keep the same point on the book under the gesture. Use the actual
+      // canvas position because a fitted spread may be centered in the stage.
+      viewport.scrollLeft += after.left + bookX * after.width - clientX;
+      viewport.scrollTop += after.top + bookY * after.height - clientY;
     }
     this.#requestHighResAtCurrentZoom();
     this.viewer.emit("zoomchange", { contentZoom: this.contentZoom });
@@ -121,6 +125,11 @@ export class ZoomController {
     const multiplier = direction > 0 ? CONTENT_ZOOM_STEP : 1 / CONTENT_ZOOM_STEP;
     const nextZoom = Math.max(CONTENT_ZOOM_MIN, Math.min(CONTENT_ZOOM_MAX, this.contentZoom * multiplier));
     this.#zoomTo(nextZoom);
+  }
+
+  setContentZoom(zoom, anchor = null) {
+    if (!Number.isFinite(zoom)) return;
+    this.#zoomTo(Math.max(CONTENT_ZOOM_MIN, Math.min(CONTENT_ZOOM_MAX, zoom)), anchor);
   }
 
   resetContentZoom() {

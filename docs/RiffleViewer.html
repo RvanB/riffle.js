@@ -34,7 +34,7 @@
     <input type="text" id="nav-search" placeholder="Search" />
     
     
-    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setZoom">setZoom</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
     
 </nav>
 
@@ -631,7 +631,7 @@ turn starts rather than when it settles).</p>
 
     
 
-    <h4 class="name" id="adjustZoom"><span class="type-signature"></span>adjustZoom<span class="signature">(factor)</span><span class="type-signature"> &rarr; {void}</span></h4>
+    <h4 class="name" id="adjustZoom"><span class="type-signature"></span>adjustZoom<span class="signature">(direction)</span><span class="type-signature"> &rarr; {void}</span></h4>
 
     
 
@@ -641,7 +641,7 @@ turn starts rather than when it settles).</p>
 <dl class="details">
     
     <dt class="tag-description">Description:</dt>
-    <dd class="tag-description"><ul class="dummy"><li><p>Multiplies the current zoom by a factor.</p></li></ul></dd>
+    <dd class="tag-description"><ul class="dummy"><li><p>Zooms in or out by one step.</p></li></ul></dd>
     
 
     
@@ -719,7 +719,7 @@ turn starts rather than when it settles).</p>
 
         <tr>
             
-                <td class="name"><code>factor</code></td>
+                <td class="name"><code>direction</code></td>
             
 
             <td class="type">
@@ -736,7 +736,7 @@ turn starts rather than when it settles).</p>
 
             
 
-            <td class="description last"><p>Zoom multiplier, e.g. <code>1.25</code> to zoom in, <code>0.8</code> out.</p></td>
+            <td class="description last"><p>Positive to zoom in, negative to zoom out.</p></td>
         </tr>
 
     
@@ -1266,7 +1266,7 @@ spread).</p></li></ul></dd>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line222">line 222</a>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line234">line 234</a>
     </li></ul></dd>
     
 
@@ -1445,7 +1445,7 @@ event names and their payloads.</p></li></ul></dd>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line210">line 210</a>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line222">line 222</a>
     </li></ul></dd>
     
 
@@ -1625,7 +1625,7 @@ searchable text <em>(advanced)</em>. Works with pages loaded from a PDF
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line233">line 233</a>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line245">line 245</a>
     </li></ul></dd>
     
 
@@ -2402,7 +2402,7 @@ a single-page spread. Empty when the spread has no source pages. Handy for a
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line189">line 189</a>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line201">line 201</a>
     </li></ul></dd>
     
 
@@ -2665,7 +2665,7 @@ element you scroll.</p></li></ul></dd>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line198">line 198</a>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line210">line 210</a>
     </li></ul></dd>
     
 
@@ -2755,6 +2755,205 @@ element you scroll.</p></li></ul></dd>
             
 
             <td class="description last"><p>The scroll/viewport element.</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">void</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="setZoom"><span class="type-signature"></span>setZoom<span class="signature">(zoom, anchor<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {void}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>Sets the book zoom, clamped to 0.5–6. An optional point in browser client
+coordinates keeps that point on the book beneath a pinch gesture.</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="createViewer.js.html">createViewer.js</a>, <a href="createViewer.js.html#line189">line 189</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>zoom</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+
+            <td class="description last"><p>Absolute zoom (<code>1</code> fits the spread).</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>anchor</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+
+            <td class="description last"><p>Zoom focal point.</p></td>
         </tr>
 
     

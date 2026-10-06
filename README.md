@@ -17,12 +17,15 @@ assumes React, Vue, Angular, or any framework.
 *A screenshot of [the demo](https://rvanbronkhorst.com/riffle.js/) — view its [source](https://github.com/RvanB/riffle.js/blob/main/index.html).*
 
 On touchscreens, swipe left or right in the standalone demo to turn spreads.
-Use the zoom buttons to enlarge a page and drag to pan; **Fit** restores swipe
-navigation. **Hide** collapses the top controls, and **Show controls** brings
-them back. The thumbnail toggle frees up more reading space, while the bottom
-page buttons and page number remain available. Paper settings expand on demand.
+Pinch on the book (or use the zoom buttons) to enlarge it, then drag to pan.
+The toolbar stays the same size. Swipe outward from a
+horizontal edge to turn a spread, or tap **Fit** to restore the full spread.
+**Focus** hides the controls; **Exit focus** or Escape brings them back.
+**Thumbnails** opens the thumbnail strip, including keyboard-accessible page shortcuts.
+The **Paper settings** popover adjusts paper tone and show-through without moving
+the reader. Open a PDF or images with **Open file**, or drag files onto the page.
 
-Run the demo gesture regression checks with `node --test demo/pageSwipes.test.js`.
+Run the demo gesture and zoom regression checks with `node --test demo/*.test.js`.
 
 ## The programming model
 
@@ -119,7 +122,7 @@ The public API is intentionally small:
 - `createViewer(options)` — create a viewer element.
 - `createPageStrip(viewer)` — create a thumbnail strip bound to a viewer.
 - The viewer element's methods (`openPdf`, `openImages`, `navigateBy`,
-  `goToPage`, `adjustZoom`, `resetZoom`, `on`, `off`, …).
+  `goToPage`, `adjustZoom`, `setZoom`, `resetZoom`, `on`, `off`, …).
 
 For hosts that keep their own page model rather than handing Riffle a file and
 letting it drive:

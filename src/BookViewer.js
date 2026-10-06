@@ -270,6 +270,8 @@ export class BookViewer {
    */
   adjustZoom(direction) { this.zoomController.adjustContentZoom(direction); }
 
+  setZoom(zoom, anchor = null) { this.zoomController.setContentZoom(zoom, anchor); }
+
   /**
    * Resets content zoom to 1.
    *

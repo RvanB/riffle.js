@@ -3,522 +3,58 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Riffle — standalone demo</title>
-    <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; height: 100%; }
-      body {
-          height: 100dvh;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          background: #1e1e1e;
-          color: #ddd;
-      }
-      header {
-          flex: 0 0 auto;
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 8px;
-          max-height: 45%;
-          overflow: auto;
-          padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
-          background: #111;
-          border-bottom: 1px solid #333;
-      }
-      .file-picker {
-          position: relative;
-          min-height: 44px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          background: #2a2a2a;
-          padding: 6px 12px;
-          border-radius: 4px;
-          border: 1px solid #444;
-      }
-      .file-picker input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
-      .file-picker:focus-within, :focus-visible { outline: 2px solid #6af; outline-offset: 2px; }
-      .file-picker:hover { background: #333; }
-      .doc-link {
-          display: inline-flex;
-          align-items: center;
-          min-height: 44px;
-          padding: 0 8px;
-          color: #aaa;
-          font-size: 13px;
-          text-decoration: none;
-          border-bottom: 1px solid #555;
-      }
-      .doc-link:hover { color: #ddd; border-bottom-color: #ddd; }
-      #paper-controls {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-          padding: 8px 0;
-          color: #888;
-          font-size: 13px;
-      }
-      #paper-controls select {
-          background: #2a2a2a;
-          color: #ddd;
-          border: 1px solid #444;
-          border-radius: 4px;
-          padding: 5px 8px;
-          font: inherit;
-          font-size: 16px;
-          min-height: 44px;
-      }
-      #paper-controls input[type="range"] {
-          width: 110px;
-          min-height: 44px;
-          accent-color: #6af;
-      }
-      #show-through-value {
-          width: 2.4em;
-          color: #ddd;
-          font-variant-numeric: tabular-nums;
-      }
-      #page-jump {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          color: #888;
-          font-size: 13px;
-          justify-content: center;
-          flex-wrap: wrap;
-          padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left));
-          background: #161616;
-      }
-      #page-input {
-          width: 56px;
-          background: #2a2a2a;
-          color: #ddd;
-          border: 1px solid #444;
-          border-radius: 4px;
-          padding: 4px 6px;
-          font: inherit;
-          font-size: 16px;
-          min-height: 44px;
-          text-align: right;
-      }
-      #page-input::-webkit-outer-spin-button,
-      #page-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      #page-input { -moz-appearance: textfield; }
-      .zoom-controls { display: flex; gap: 4px; }
-      button, summary {
-          min-width: 44px; min-height: 44px;
-          padding: 6px 10px;
-          background: #2a2a2a; color: #ddd;
-          border: 1px solid #444; border-radius: 4px;
-          font: inherit; font-size: 14px; cursor: pointer;
-      }
-      button:hover, summary:hover { background: #333; }
-      button:disabled { opacity: 0.35; cursor: default; }
-      summary { display: flex; align-items: center; width: fit-content; list-style: none; }
-      summary::-webkit-details-marker { display: none; }
-      summary::after { content: " +"; white-space: pre; }
-      details[open] summary::after { content: " −"; }
-      #paper-settings { margin-left: auto; }
-      #paper-settings[open] { order: 2; flex-basis: 100%; }
-      #hide-toolbar { margin-left: auto; }
-      .strip-icon { display: none; }
-      [hidden] { display: none !important; }
-      #show-toolbar {
-          position: fixed;
-          top: max(8px, env(safe-area-inset-top));
-          right: max(8px, env(safe-area-inset-right));
-          z-index: 5;
-          box-shadow: 0 2px 12px #0008;
-      }
-      #reader-footer { flex: 0 0 auto; padding-bottom: env(safe-area-inset-bottom); background: #161616; }
-      #gesture-hint { margin: 0; padding: 0 8px 4px; text-align: center; color: #999; font-size: 12px; }
-      #empty-state { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 24px; color: #aaa; pointer-events: none; }
-      #empty-state strong { color: #ddd; font-size: 20px; }
-      @media (max-width: 600px) {
-          header { gap: 6px; }
-          .file-picker { padding: 6px 8px; font-size: 14px; }
-          #paper-settings { margin-left: 0; }
-          .zoom-controls { margin-left: auto; }
-          #hide-toolbar { margin-left: 0; }
-          #spread-readout { min-width: 108px; }
-      }
-      @media (max-height: 500px) {
-          #gesture-hint { display: none; }
-      }
-      @media (max-width: 360px) {
-          .file-picker { font-size: 13px; }
-          .doc-link { padding: 0; font-size: 12px; }
-          .strip-label { display: none; }
-          .strip-icon { display: inline; font-size: 20px; }
-      }
-
-      #viewport {
-          flex: 1;
-          min-height: 0;
-          min-width: 0;
-          overflow: auto;
-          position: relative;
-          overscroll-behavior: contain;
-          touch-action: var(--reader-touch-action, pan-y pinch-zoom);
-      }
-      /* Touch drags belong to the reader; mouse/pen text selection still works. */
-      #viewport .riffle-pdf-text-layer { touch-action: var(--reader-touch-action, pan-y pinch-zoom); }
-      #stage {
-          min-width: 100%;
-          min-height: 100%;
-          width: max-content;
-          height: max-content;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 32px;
-          box-sizing: border-box;
-      }
-      #viewport canvas {
-          filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.26));
-      }
-      #loading-status {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #aaa;
-          font-size: 14px;
-          pointer-events: none;
-      }
-      #loading-status[hidden] { display: none; }
-      #drop-overlay {
-          position: fixed;
-          inset: 12px;
-          z-index: 10;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px dashed #6af;
-          border-radius: 10px;
-          background: rgba(20, 30, 42, 0.9);
-          color: #d9ecff;
-          font-size: 18px;
-          font-weight: 600;
-          pointer-events: none;
-      }
-      #drop-overlay[hidden] { display: none; }
-      #strip-container {
-          height: 64px;
-          background: #161616;
-          border-top: 1px solid #333;
-          overflow: hidden;
-          display: flex;
-          align-items: center;
-          padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-      }
-      /* The page strip element the library creates. Style it via its stable
-         class. Allow programmatic scrollLeft (the strip keeps the in-spread
-         thumb centered) but hide the scrollbar so the overflow looks clean. */
-      .riffle-page-strip {
-          flex: 1;
-          align-self: stretch;
-          overflow-x: auto;
-          scrollbar-width: none;        /* Firefox */
-          display: flex;
-          align-items: center;
-          gap: 4px;
-      }
-      .riffle-page-strip::-webkit-scrollbar { display: none; }  /* WebKit */
-      .strip-thumb {
-          min-width: 44px;
-          display: inline-flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 2px;
-          cursor: pointer;
-          flex: 0 0 auto;
-      }
-      .strip-thumb canvas {
-          display: block;
-          border: 1px solid #333;
-      }
-      .strip-thumb.in-spread canvas {
-          border-color: #6af;
-          box-shadow: 0 0 0 1px #6af;
-      }
-      .strip-thumb span {
-          font-size: 10px;
-          color: #777;
-      }
-
-    </style>
+    <meta name="theme-color" content="#202225" />
+    <title>riffle.js — demo</title>
+    <link rel="stylesheet" href="./demo/reader.css" />
   </head>
   <body>
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+      <symbol id="icon-open" viewBox="0 0 24 24"><path d="M3 8V5h7l2 3h9v11H3V8Zm0 3h18"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m4 0h5M4 17h3m4 0h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+      <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></symbol>
+      <symbol id="icon-focus" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+      <symbol id="icon-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+      <symbol id="icon-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    </defs></svg>
     <header id="toolbar" aria-label="Reader controls">
-      <label class="file-picker">
-        <span>Open PDF</span>
-        <input type="file" id="pdf-input" accept="application/pdf" />
-      </label>
-      <label class="file-picker">
-        <span>Open Images</span>
-        <input type="file" id="image-input" accept="image/*" multiple />
-      </label>
-      <a class="doc-link" href="./docs/">Docs</a>
-      <button id="hide-toolbar" type="button" aria-label="Hide controls" aria-controls="toolbar" aria-expanded="true">Hide</button>
-      <details id="paper-settings">
-        <summary>Paper</summary>
-        <div id="paper-controls">
-          <label for="paper-preset">Paper</label>
-          <select id="paper-preset"></select>
-          <label for="show-through">Show-through</label>
-          <input id="show-through" type="range" min="0" max="1" step="0.01" value="0.35" />
-          <span id="show-through-value">0.35</span>
-        </div>
-      </details>
-      <button id="toggle-strip" type="button" aria-label="Thumbnails" title="Show or hide thumbnails" aria-controls="strip-container" aria-expanded="true"><span class="strip-label">Thumbnails</span><span class="strip-icon" aria-hidden="true">▦</span></button>
-      <div class="zoom-controls">
-        <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
-        <button id="zoom-reset" type="button" title="Fit spread to screen">Fit</button>
-        <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
-      </div>
+      <span class="demo-title">riffle.js <span>demo</span></span>
+      <button data-open-file><svg class="icon"><use href="#icon-open"/></svg>Open file</button>
+      <div id="document-info" hidden><span id="document-name"></span><span id="document-meta"></span></div>
+      <nav class="header-actions" aria-label="Document actions">
+        <button id="appearance-toggle" popovertarget="paper-settings" aria-label="Paper settings" title="Paper settings"><svg class="icon"><use href="#icon-settings"/></svg>Paper settings</button>
+        <a class="doc-link" href="./docs/">Docs</a>
+      </nav>
+      <input type="file" id="file-input" accept="application/pdf,.pdf,image/*" multiple hidden />
     </header>
-    <button id="show-toolbar" type="button" aria-controls="toolbar" aria-expanded="false" hidden>Show controls</button>
-    <main id="viewport" aria-label="Book reader" aria-describedby="gesture-hint">
-      <div id="stage"></div>
-      <div id="empty-state"><strong>Open a book to start reading</strong><p>Choose a PDF or a set of images above.</p></div>
-      <div id="loading-status" role="status" hidden>Loading PDF...</div>
+    <section id="paper-settings" popover aria-labelledby="appearance-title">
+      <div class="panel-heading"><h2 id="appearance-title">Paper settings</h2><button class="icon-button" popovertarget="paper-settings" popovertargetaction="hide" aria-label="Close paper settings"><svg class="icon"><use href="#icon-close"/></svg></button></div>
+      <label class="field-label" for="paper-preset">Paper tone</label>
+      <select id="paper-preset"></select>
+      <div class="field-heading"><label class="field-label" for="show-through">Show-through</label><output id="show-through-value" for="show-through">35%</output></div>
+      <input id="show-through" type="range" min="0" max="1" step="0.01" value="0.35" aria-describedby="show-through-help" />
+      <p class="field-help" id="show-through-help">Visibility of content on the reverse side of a page.</p>
+      <div class="range-labels" aria-hidden="true"><span>Opaque</span><span>Translucent</span></div>
+    </section>
+    <button id="show-toolbar" class="floating-control" hidden><svg class="icon"><use href="#icon-focus"/></svg>Exit focus <kbd>Esc</kbd></button>
+    <main id="viewport" tabindex="-1" aria-label="Book reader" aria-describedby="gesture-hint">
+      <div id="stage" hidden></div>
+      <section id="empty-state" aria-labelledby="empty-title">
+        <h1 id="empty-title">Open a PDF or images</h1>
+        <p>Drop files here, or use <button class="text-button" data-open-file>Open file</button> to choose them.</p>
+      </section>
+      <div id="loading-status" class="status-toast" role="status" hidden><span id="status-message"></span><button id="dismiss-status" class="icon-button" aria-label="Dismiss message" hidden><svg class="icon"><use href="#icon-close"/></svg></button></div>
     </main>
-    <div id="drop-overlay" aria-hidden="true" hidden>Drop a PDF or images to open</div>
+    <div id="drop-overlay" hidden><svg class="icon"><use href="#icon-open"/></svg><strong>Drop one PDF or a set of images</strong></div>
     <footer id="reader-footer">
-      <div id="page-jump">
-        <button id="previous-page" type="button" aria-label="Previous spread">←</button>
-        <input id="page-input" type="number" min="1" value="" inputmode="numeric" aria-label="Go to page" />
-        <span id="spread-readout" aria-live="polite">pages —</span>
-        <button id="next-page" type="button" aria-label="Next spread">→</button>
+      <div id="strip-container" hidden aria-label="Page thumbnails"></div>
+      <div class="reader-controls">
+        <div class="view-controls"><button id="toggle-strip" aria-label="Thumbnails" title="Show or hide thumbnails" aria-controls="strip-container" aria-expanded="false"><svg class="icon"><use href="#icon-grid"/></svg><span class="button-label">Thumbnails</span></button><button id="hide-toolbar" aria-label="Enter focus mode" title="Focus mode"><svg class="icon"><use href="#icon-focus"/></svg><span class="button-label">Focus</span></button></div>
+        <div id="page-jump"><button id="previous-page" class="icon-button" aria-label="Previous spread" title="Previous spread (←)"><svg class="icon"><use href="#icon-left"/></svg></button><label for="page-input">Page</label><input id="page-input" type="number" min="1" value="" inputmode="numeric" aria-label="Go to page" /><span id="spread-readout" aria-live="polite">of —</span><button id="next-page" class="icon-button" aria-label="Next spread" title="Next spread (→)"><svg class="icon"><use href="#icon-right"/></svg></button></div>
+        <div class="zoom-controls"><button id="zoom-out" class="icon-button" aria-label="Zoom out">−</button><button id="zoom-reset" title="Fit spread to screen">Fit</button><button id="zoom-in" class="icon-button" aria-label="Zoom in">+</button></div>
       </div>
-      <p id="gesture-hint">Swipe to turn pages · Zoom in to pan</p>
-      <div id="strip-container"></div>
+      <p id="gesture-hint">Arrow keys to turn pages · Pinch to zoom</p>
     </footer>
-    <script type="importmap">
-      {
-          "imports": {
-              "riffle": "./src/index.js"
-          }
-      }
-    </script>
-    <script type="module">
-      import { createViewer, createPageStrip } from "riffle";
-      import { enablePageSwipes } from "./demo/pageSwipes.js";
-
-      const viewport = document.getElementById("viewport");
-      const stage = document.getElementById("stage");
-      const stripContainer = document.getElementById("strip-container");
-      const loadingStatus = document.getElementById("loading-status");
-      const dropOverlay = document.getElementById("drop-overlay");
-      const viewer = createViewer({
-          viewport,
-          paperPreset: "bright-white",
-          renderScale: 1.5,
-          // transmittance is (1 - paperThickness) * showThrough, so pinning
-          // thickness at 0 makes the slider below the direct control.
-          paperThickness: 0,
-          showThrough: 0.35,
-      });
-      stage.appendChild(viewer);
-      stripContainer.appendChild(createPageStrip(viewer));
-      enablePageSwipes(viewport, viewer);
-      viewer.on("zoomchange", () => {
-          document.getElementById("gesture-hint").textContent = viewer.contentZoom > 1.001
-              ? "Drag to pan · Tap Fit to enable page swipes"
-              : "Swipe to turn pages · Zoom in to pan";
-      });
-
-      const toolbar = document.getElementById("toolbar");
-      const hideToolbar = document.getElementById("hide-toolbar");
-      const showToolbar = document.getElementById("show-toolbar");
-      const setToolbarVisible = (visible) => {
-          toolbar.hidden = !visible;
-          showToolbar.hidden = visible;
-          hideToolbar.setAttribute("aria-expanded", String(visible));
-          showToolbar.setAttribute("aria-expanded", String(visible));
-          (visible ? hideToolbar : showToolbar).focus({ preventScroll: true });
-      };
-      hideToolbar.addEventListener("click", () => setToolbarVisible(false));
-      showToolbar.addEventListener("click", () => setToolbarVisible(true));
-      const toggleStrip = document.getElementById("toggle-strip");
-      toggleStrip.addEventListener("click", () => {
-          stripContainer.hidden = !stripContainer.hidden;
-          toggleStrip.setAttribute("aria-expanded", String(!stripContainer.hidden));
-      });
-
-      const paperPreset = document.getElementById("paper-preset");
-      for (const { id, label } of viewer.paperPresets) {
-          const option = document.createElement("option");
-          option.value = id;
-          option.textContent = label;
-          paperPreset.appendChild(option);
-      }
-      paperPreset.value = viewer.display.paperPreset;
-      paperPreset.addEventListener("change", () => viewer.setPaperPreset(paperPreset.value));
-
-      const showThrough = document.getElementById("show-through");
-      const showThroughValue = document.getElementById("show-through-value");
-      const syncShowThrough = () => {
-          showThroughValue.textContent = Number(showThrough.value).toFixed(2);
-      };
-      showThrough.addEventListener("input", () => {
-          viewer.setDisplay({ showThrough: Number(showThrough.value) });
-          syncShowThrough();
-      });
-      syncShowThrough();
-
-      const pageInput = document.getElementById("page-input");
-      const spreadReadout = document.getElementById("spread-readout");
-      const previousPage = document.getElementById("previous-page");
-      const nextPage = document.getElementById("next-page");
-      previousPage.addEventListener("click", () => viewer.navigateBy(-1));
-      nextPage.addEventListener("click", () => viewer.navigateBy(1));
-
-      const spreadLabel = (spread) => {
-          const pages = viewer.pagesInSpread(spread);
-          return pages.length ? pages.join("-") : "—";
-      };
-
-      const refreshPageReadout = () => {
-          const total = viewer.pageCount;
-          spreadReadout.textContent = total > 0
-              ? `pages ${spreadLabel(viewer.effectiveSpread)} of ${total}`
-              : "pages —";
-          pageInput.disabled = total <= 0;
-          previousPage.disabled = total <= 0 || viewer.effectiveSpread <= 0;
-          nextPage.disabled = total <= 0 || viewer.effectiveSpread >= viewer.numSpreads - 1;
-          document.getElementById("empty-state").hidden = total > 0;
-          pageInput.max = String(Math.max(1, total));
-          if (document.activeElement !== pageInput) {
-              const current = viewer.pagesInSpread(viewer.effectiveSpread)[0];
-              pageInput.value = total > 0 && current ? String(current) : "";
-          }
-      };
-      viewer.on("sourcechange", refreshPageReadout);
-      viewer.on("spreadchange", refreshPageReadout);
-      viewer.on("effectivespreadchange", refreshPageReadout);
-      refreshPageReadout();
-
-      pageInput.addEventListener("change", () => {
-          const n = Number(pageInput.value);
-          if (!Number.isFinite(n) || n < 1) return;
-          viewer.goToPage(n);
-      });
-      pageInput.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") pageInput.blur();
-      });
-
-      const openImages = async (files) => {
-          const list = [...files];
-          if (!list.length) return;
-          loadingStatus.hidden = false;
-          document.getElementById("empty-state").hidden = true;
-          loadingStatus.textContent = list.length === 1 ? "Loading image..." : "Loading images...";
-          try {
-              await viewer.openImages(list);
-              refreshPageReadout();
-              loadingStatus.hidden = true;
-          } catch (error) {
-              console.error(error);
-              loadingStatus.textContent = "Could not load images";
-          }
-      };
-
-      const openPdf = async (file) => {
-          loadingStatus.hidden = false;
-          document.getElementById("empty-state").hidden = true;
-          loadingStatus.textContent = "Loading PDF...";
-          try {
-              await viewer.openPdf(file);
-              refreshPageReadout();
-              loadingStatus.hidden = true;
-          } catch (error) {
-              console.error(error);
-              loadingStatus.textContent = "Could not load PDF";
-          }
-      };
-
-      const openFiles = async (files) => {
-          const list = [...files];
-          const pdfs = list.filter((file) =>
-              file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-          );
-          const images = list.filter((file) => file.type.startsWith("image/"));
-
-          if (pdfs.length === 1 && list.length === 1) {
-              await openPdf(pdfs[0]);
-          } else if (images.length) {
-              await openImages(images);
-          } else if (pdfs.length) {
-              loadingStatus.hidden = false;
-              loadingStatus.textContent = "Drop one PDF at a time";
-          } else if (list.length) {
-              loadingStatus.hidden = false;
-              loadingStatus.textContent = "Drop a PDF or image files";
-          }
-      };
-
-      document.getElementById("pdf-input").addEventListener("change", async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          await openPdf(file);
-      });
-
-      document.getElementById("image-input").addEventListener("change", async (event) => {
-          const files = [...event.target.files];
-          event.target.value = "";
-          if (!files?.length) return;
-          await openImages(files);
-      });
-
-      let dragDepth = 0;
-      window.addEventListener("dragenter", (event) => {
-          if (!event.dataTransfer?.types.includes("Files")) return;
-          event.preventDefault();
-          dragDepth += 1;
-          dropOverlay.hidden = false;
-      });
-      window.addEventListener("dragover", (event) => {
-          if (!event.dataTransfer?.types.includes("Files")) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-      });
-      window.addEventListener("dragleave", (event) => {
-          if (!event.dataTransfer?.types.includes("Files")) return;
-          dragDepth = Math.max(0, dragDepth - 1);
-          if (dragDepth === 0) dropOverlay.hidden = true;
-      });
-      window.addEventListener("drop", async (event) => {
-          event.preventDefault();
-          dragDepth = 0;
-          dropOverlay.hidden = true;
-          if (event.dataTransfer?.files.length) await openFiles(event.dataTransfer.files);
-      });
-
-      document.getElementById("zoom-in").addEventListener("click", () => viewer.adjustZoom(1));
-      document.getElementById("zoom-out").addEventListener("click", () => viewer.adjustZoom(-1));
-      document.getElementById("zoom-reset").addEventListener("click", () => viewer.resetZoom());
-
-      window.addEventListener("keydown", (event) => {
-          if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-          if (event.target.closest("input, select, textarea, button, summary, a, [contenteditable]")) return;
-          if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-              event.preventDefault();
-              viewer.navigateBy(1);
-          } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-              event.preventDefault();
-              viewer.navigateBy(-1);
-          }
-      });
-
-    </script>
+    <script type="module" src="./demo/reader.js"></script>
   </body>
 </html>

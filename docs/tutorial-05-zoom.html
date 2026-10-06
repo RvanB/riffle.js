@@ -34,7 +34,7 @@
     <input type="text" id="nav-search" placeholder="Search" />
     
     
-    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h2><a href="https://github.com/RvanB/riffle.js" target="_blank" >GitHub</a></h2><h2><a href="../" >Demo</a></h2><h3>Tutorials</h3><ul><li><a href="tutorial-01-getting-started.html">Getting started</a></li><li><a href="tutorial-02-load-a-pdf.html">Load a PDF</a></li><li><a href="tutorial-03-navigate-pages.html">Navigate pages</a></li><li><a href="tutorial-04-page-strip.html">Add a thumbnail strip</a></li><li><a href="tutorial-05-zoom.html">Control zoom</a></li><li><a href="tutorial-06-events.html">Listen for events</a></li><li><a href="tutorial-07-images.html">Display images</a></li><li><a href="tutorial-08-text.html">Select & OCR text</a></li></ul><h3>Interfaces</h3><ul><li><a href="RiffleViewer.html">RiffleViewer</a><ul class='methods'><li data-type='method' style='display: none;'><a href="RiffleViewer.html#adjustZoom">adjustZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#goToPage">goToPage</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateBy">navigateBy</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#navigateTo">navigateTo</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#off">off</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#on">on</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openHocr">openHocr</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openImages">openImages</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#openPdf">openPdf</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#pagesInSpread">pagesInSpread</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#resetZoom">resetZoom</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setSource">setSource</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setViewport">setViewport</a></li><li data-type='method' style='display: none;'><a href="RiffleViewer.html#setZoom">setZoom</a></li></ul></li></ul><h3>Global</h3><ul><li><a href="global.html#RiffleOptions">RiffleOptions</a></li><li><a href="global.html#createPageStrip">createPageStrip</a></li><li><a href="global.html#createViewer">createViewer</a></li></ul>
     
 </nav>
 
@@ -55,18 +55,28 @@
     <p>The viewer fits the spread to its container by default. You can zoom in and out
 through methods on the <a href="RiffleViewer.html"><code>RiffleViewer</code></a> element.</p>
 <h2>Zoom controls</h2>
-<p><code>adjustZoom(delta)</code> multiplies the current zoom by <code>delta</code>; <code>resetZoom()</code>
-restores the fit-to-viewport zoom:</p>
-<pre class="prettyprint source lang-js"><code>zoomInButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(1.25));
-zoomOutButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(0.8));
+<p><code>adjustZoom(direction)</code> takes a positive value to zoom in one step and a
+negative value to zoom out. <code>setZoom(zoom)</code> sets an absolute zoom (0.5–6),
+and <code>resetZoom()</code> restores the fit-to-viewport zoom:</p>
+<pre class="prettyprint source lang-js"><code>zoomInButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(1));
+zoomOutButton.addEventListener(&quot;click&quot;, () => viewer.adjustZoom(-1));
 resetButton.addEventListener(&quot;click&quot;, () => viewer.resetZoom());
 </code></pre>
+<p>For continuous pinch zoom, pass the desired scale and an optional focal point
+in browser client coordinates. The book stays anchored beneath that point:</p>
+<pre class="prettyprint source lang-js"><code>viewer.setZoom(startZoom * currentDistance / startDistance, {
+  clientX: midpointX,
+  clientY: midpointY,
+});
+</code></pre>
+<p>The standalone demo handles two-finger gestures within the reader and prevents
+the browser from scaling the whole webpage during those gestures.</p>
 <h2>Wheel / trackpad zoom</h2>
 <p>Zoom on ctrl/⌘ + wheel, the convention most PDF readers use:</p>
 <pre class="prettyprint source lang-js"><code>viewer.addEventListener(&quot;wheel&quot;, (e) => {
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
-  viewer.adjustZoom(e.deltaY &lt; 0 ? 1.1 : 0.9);
+  viewer.setZoom(viewer.contentZoom * (e.deltaY &lt; 0 ? 1.1 : 0.9));
 }, { passive: false });
 </code></pre>
 <h2>Reading the zoom</h2>
