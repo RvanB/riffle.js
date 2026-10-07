@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const viewport = $("viewport");
 const stage = $("stage");
 const stripContainer = $("strip-container");
-const viewer = createViewer({ viewport, paperPreset: "bright-white", renderScale: 1.5, paperThickness: 0, showThrough: 0.35 });
+const viewer = createViewer({ viewport, paperPreset: "bright-white", renderScale: 1.5, paperThickness: 0 });
 stage.appendChild(viewer);
 stripContainer.appendChild(createPageStrip(viewer));
 enablePageSwipes(viewport, viewer);

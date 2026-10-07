@@ -22,7 +22,7 @@ function pickRendererClass(option) {
  * @property {"natural"|"ivory"|"bright-white"} [paperPreset] Named paper preset.
  * @property {string} [contentBlendMode="multiply"] Blend mode for page content.
  * @property {number} [paperThickness] Paper edge and turn-lighting strength from 0 to 1.
- * @property {number} [showThrough=0] Strength of the show-through translucency (adjacent page bleeding through) from 0 (off) to 1.
+ * @property {number} [showThrough=0.1] Strength of the show-through translucency (adjacent page bleeding through) from 0 (off) to 1.
  * @property {boolean} [showPageBorder=true] Whether to render the page edge treatment.
  * @property {number} [maxHighResPages=8] High-resolution page bitmap LRU capacity.
  * @property {HTMLElement|null} [viewport=null] Element used for zoom measurement and scroll preservation.
